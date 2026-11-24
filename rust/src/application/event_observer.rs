@@ -9,7 +9,7 @@ use crate::{
     config::{ConfigStore, RuntimePaths},
     files::{FilesService, GitTurnCompleted, GitTurnSnapshot},
     hub::{sockets::OrderedEventObserver, task_owner::HubTaskHandle},
-    orchestration::handoff::{HandoffStore, KIND_GIT_TURN, Record},
+    orchestration::handoff::{HandoffStore, KIND_GIT_TURN, Record, RecordKey},
     process::{self, Cancellation, ExitOutcome, git::GitCommand},
     proto::{
         core::*,
@@ -497,6 +497,7 @@ impl ApplicationEventObserver {
             .flatten()
             .filter_map(|file| file["path"].as_str().map(str::to_owned))
             .collect();
+        let key = RecordKey::for_snapshot(&snapshot);
         let record = Record {
             kind: KIND_GIT_TURN.into(),
             provider: snapshot.provider,
@@ -516,7 +517,7 @@ impl ApplicationEventObserver {
         let now = parse_rfc3339(&turn.ended_at).unwrap_or_else(|_| Timestamp::now());
         // Short append I/O occurs outside Session locks. Keeping it synchronous
         // in the owned completion avoids abandoning a blocking writer on abort.
-        if self.handoff.append(binding.session.0, record, now).is_err() {
+        if self.handoff.append(key, record, now).is_err() {
             (self.warning)(
                 "handoff append failed",
                 &SessionError::InvalidRequest(

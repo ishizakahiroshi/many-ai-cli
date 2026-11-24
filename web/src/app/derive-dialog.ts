@@ -62,6 +62,8 @@ function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): 
 
 interface DerivePreviewResponse {
   ok?: boolean;
+  /** 開いた記録の名前（例 s20261116-6）。 */
+  record?: string;
   exists?: boolean;
   live?: boolean;
   provider?: string;
@@ -85,6 +87,11 @@ interface DeriveProviderOption {
 // Hub を再起動した後は session 表に居ないので、看板だけで開けることが要る。
 interface DeriveSource {
   sessionID: number;
+  /**
+   * 看板の記録の名前（例 s20261116-6）。同じ #番号が別の日の起動にも使われる
+   * ので、一覧から開いた記録へのメモはこの名前で保存する（#44）。空なら番号で送る。
+   */
+  record: string;
   provider: string;
   cwd: string;
   live: boolean;
@@ -128,10 +135,12 @@ async function loadLaunchOptions(): Promise<DeriveProviderOption[]> {
   }
 }
 
-async function loadSource(sessionID: number): Promise<DeriveSource> {
-  const live = sessions.get(sessionID) as any;
+async function loadSource(sessionID: number, record = ''): Promise<DeriveSource> {
+  // 記録を名指しで開くときは、同じ番号で今動いている別の起動の素性を混ぜない。
+  const live = record ? undefined : sessions.get(sessionID) as any;
   const source: DeriveSource = {
     sessionID,
+    record,
     provider: String(live?.provider || ''),
     cwd: String(live?.cwd || ''),
     live: !!live,
@@ -142,9 +151,10 @@ async function loadSource(sessionID: number): Promise<DeriveSource> {
     notePaths: [],
   };
   try {
-    const res = await apiFetch(`/api/handoff/${encodeURIComponent(String(sessionID))}`);
+    const res = await apiFetch(`/api/handoff/${encodeURIComponent(record || String(sessionID))}`);
     const data = await res.json() as DerivePreviewResponse;
     if (res.ok && data?.ok && data.exists) {
+      source.record = String(data.record || source.record);
       source.provider = String(data.provider || source.provider);
       source.cwd = String(data.cwd || source.cwd);
       source.markdown = String(data.markdown || '');
@@ -197,7 +207,7 @@ function unsetOption(): { value: string; label: string } {
   return { value: '', label: tx('spawn_confirm_option_unset', 'Not specified') };
 }
 
-export async function openDeriveDialog(sessionID: number, opts: { kind?: DeriveKind } = {}): Promise<void> {
+export async function openDeriveDialog(sessionID: number, opts: { kind?: DeriveKind; record?: string } = {}): Promise<void> {
   const backdrop = document.createElement('div');
   backdrop.className = 'derive-dialog-backdrop aac-wheel-overlay';
   backdrop.innerHTML = `<div class="ui-modal ui-modal--md derive-dialog" role="dialog" aria-modal="true" aria-labelledby="derive-dialog-title">
@@ -217,7 +227,7 @@ export async function openDeriveDialog(sessionID: number, opts: { kind?: DeriveK
   backdrop.addEventListener('click', (event) => { if (event.target === backdrop) close(); });
   backdrop.querySelector('[data-derive-cancel]')?.addEventListener('click', close);
 
-  const [customProviders, source] = await Promise.all([loadLaunchOptions(), loadSource(sessionID)]);
+  const [customProviders, source] = await Promise.all([loadLaunchOptions(), loadSource(sessionID, opts.record || '')]);
   await loadSubscriptions();
   if (!backdrop.isConnected) return; // 読み込み中に閉じられた
 
@@ -619,7 +629,7 @@ function renderDeriveForm(
     refreshStartEnabled();
     setError('');
     try {
-      const response = await apiFetch(`/api/handoff/${encodeURIComponent(String(source.sessionID))}/manual-note`, {
+      const response = await apiFetch(`/api/handoff/${encodeURIComponent(source.record || String(source.sessionID))}/manual-note`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: promptArea.value }),

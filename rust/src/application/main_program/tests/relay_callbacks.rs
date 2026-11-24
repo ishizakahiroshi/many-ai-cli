@@ -106,6 +106,17 @@ impl Fixture {
             priming,
         }
     }
+    /// The record name the Hub gave the registered session (#44).
+    fn key(&self) -> crate::orchestration::handoff::RecordKey {
+        crate::orchestration::handoff::RecordKey::for_snapshot(
+            &self
+                .composition
+                .dependencies
+                .core
+                .snapshot(self.binding.session)
+                .unwrap(),
+        )
+    }
     fn queued_summary_count(&self) -> usize {
         self.composition
             .dependencies
@@ -177,7 +188,7 @@ async fn relay_real_callbacks_commit_routine_and_both_handoff_records_before_com
     fixture.assert_routine_finished();
     assert_eq!(hook_calls.load(Ordering::SeqCst), 1);
     let records = HandoffStore::new(fixture.paths.clone())
-        .read_session(fixture.binding.session.0)
+        .read_session(fixture.key())
         .unwrap();
     assert_eq!(
         records.iter().map(|r| r.kind.as_str()).collect::<Vec<_>>(),
@@ -229,7 +240,7 @@ async fn relay_real_routine_write_failure_warns_but_handoff_and_completed_contin
     );
     assert_eq!(
         HandoffStore::new(fixture.paths.clone())
-            .read_session(fixture.binding.session.0)
+            .read_session(fixture.key())
             .unwrap()
             .len(),
         2
@@ -260,7 +271,7 @@ async fn relay_real_second_handoff_append_failure_keeps_prior_commits_and_primin
     let fixture = Fixture::new().await;
     let deps = &fixture.composition.dependencies;
     let store = HandoffStore::new(fixture.paths.clone());
-    let path = store.path_for(fixture.binding.session.0).unwrap();
+    let path = store.path_for(fixture.key()).unwrap();
     let held = path.with_extension("held-jsonl");
     let first_path = path.clone();
     let held_path = held.clone();

@@ -55,8 +55,27 @@ pub type BranchLookup = Arc<dyn Fn(String) -> CoreFuture<'static, String> + Send
 pub type PendingShellLookup = Arc<
     dyn Fn(TranscriptSessionIdentity) -> CoreFuture<'static, Option<Vec<String>>> + Send + Sync,
 >;
+/// The handoff records already on disk, as far as session numbering needs
+/// them (#44). Called outside the state lock, under the registration lock.
+pub trait SessionRecordIndex: Send + Sync {
+    /// Highest session number that already has records on `day` (`YYYYMMDD`).
+    fn highest_number_on(&self, day: &str) -> i64;
+    /// Whether a wrapper coming back as `number` is a launch an earlier
+    /// version recorded under the bare number, so it keeps writing there.
+    fn continues_legacy_launch(
+        &self,
+        number: i64,
+        started_at: &str,
+        provider: &str,
+        cwd: &str,
+    ) -> bool;
+}
 pub struct EngineOptions {
     pub hub_instance: String,
+    /// Session numbers are the day's running count (#44): a Hub started again
+    /// on the same day continues above the numbers this index has recorded.
+    /// Absence numbers each day from 1, skipping numbers still in use.
+    pub record_index: Option<Arc<dyn SessionRecordIndex>>,
     pub token_statusbar: bool,
     /// Live cache/config route inference; never performs network IO.
     pub model_route: DetectedModelRoute,
@@ -82,6 +101,7 @@ impl Default for EngineOptions {
     fn default() -> Self {
         Self {
             hub_instance: String::new(),
+            record_index: None,
             subscription_name: Arc::new(|_, _| String::new()),
             branch_lookup: Arc::new(|_| Box::pin(async { String::new() })),
             token_statusbar: true,
@@ -133,12 +153,19 @@ struct PendingSpawn {
     metadata: SpawnRegistrationMetadata,
 }
 struct State {
+    /// Highest number given out on `numbering_day` (#44).
     next_id: i64,
+    /// `YYYYMMDD` of the latest number given out; empty before the first.
+    numbering_day: String,
     next_incarnation: u64,
     next_reservation: u64,
     auth_epoch: AuthEpoch,
     sessions: BTreeMap<LiveSessionId, Session>,
-    dismissed: BTreeSet<LiveSessionId>,
+    /// Dismissed numbers with the start days of the launches dismissed under
+    /// them. A wrapper started on such a day may not come back; the same
+    /// number given out again on a later day may. An empty day is unknown and
+    /// stops every launch under that number.
+    dismissed: BTreeMap<LiveSessionId, BTreeSet<String>>,
     revoked_relay_children: BTreeSet<String>,
     uis: BTreeMap<UiConnectionId, UiState>,
     retired_uis: BTreeMap<(UiConnectionId, AuthEpoch), Arc<authorization::UiWorkState>>,
@@ -233,6 +260,60 @@ struct ConfirmationEntry {
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
+/// Session numbering (#44). The number on screen is the day's running count;
+/// the handoff records are named by day and number, so a number given out
+/// again on another day never reaches an earlier launch's records.
+impl State {
+    /// On a new day, numbering starts above `floor`: the highest number the
+    /// handoff records already use that day (a Hub restarted the same day
+    /// does not go back to 1).
+    fn enter_numbering_day(&mut self, day: &str, floor: Option<i64>) {
+        if self.numbering_day != day {
+            self.numbering_day = day.to_owned();
+            self.next_id = floor.unwrap_or(0).max(0);
+        }
+    }
+    /// The next number of the current day. Numbers still held by a card on
+    /// screen (a session started before midnight keeps its number) and numbers
+    /// dismissed on an unknown day are skipped.
+    fn next_free_number(&self) -> Option<LiveSessionId> {
+        let mut candidate = self.next_id.checked_add(1)?;
+        while self.sessions.contains_key(&LiveSessionId(candidate))
+            || self
+                .dismissed
+                .get(&LiveSessionId(candidate))
+                .is_some_and(|days| days.contains(""))
+        {
+            candidate = candidate.checked_add(1)?;
+        }
+        Some(LiveSessionId(candidate))
+    }
+    /// Whether a wrapper started on `day` may not come back as `id`.
+    fn dismissed_for(&self, id: LiveSessionId, day: &str) -> bool {
+        self.dismissed
+            .get(&id)
+            .is_some_and(|days| days.contains("") || days.contains(day))
+    }
+    fn mark_dismissed(&mut self, id: LiveSessionId, started_at: &str) {
+        let day = crate::orchestration::handoff::record_day(started_at).unwrap_or_default();
+        self.dismissed.entry(id).or_default().insert(day);
+    }
+}
+impl SessionEngine {
+    /// Highest number already recorded on `day`, read only when numbering
+    /// enters that day. Blocking I/O: call outside the state lock.
+    fn numbering_floor(&self, day: &str) -> Option<i64> {
+        if lock(&self.state).numbering_day == day {
+            return None;
+        }
+        Some(
+            self.options
+                .record_index
+                .as_ref()
+                .map_or(0, |index| index.highest_number_on(day)),
+        )
+    }
+}
 fn timestamp(now: Timestamp) -> Result<String, SessionError> {
     proto::time::format_rfc3339(now).map_err(|_| {
         SessionError::InvalidRequest("timestamp is outside the supported range".into())
@@ -279,11 +360,12 @@ impl SessionEngine {
             ui_presence: tokio::sync::watch::channel(UiPresence::default()).0,
             state: Mutex::new(State {
                 next_id: 0,
+                numbering_day: String::new(),
                 next_incarnation: 0,
                 next_reservation: 0,
                 auth_epoch: AuthEpoch(0),
                 sessions: BTreeMap::new(),
-                dismissed: BTreeSet::new(),
+                dismissed: BTreeMap::new(),
                 revoked_relay_children: BTreeSet::new(),
                 uis: BTreeMap::new(),
                 retired_uis: BTreeMap::new(),

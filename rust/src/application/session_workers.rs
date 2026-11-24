@@ -14,7 +14,7 @@ use crate::{
         child_launch::board::BoardStore,
         handoff::{
             HandoffStore, KIND_DONE, KIND_SESSION_END, KIND_SESSION_REATTACH, KIND_SESSION_START,
-            KIND_TRANSCRIPT, KIND_TURN_SUMMARY, Record,
+            KIND_TRANSCRIPT, KIND_TURN_SUMMARY, Record, RecordKey,
         },
         initial_prompt::{
             InitialPromptCallbacks, InitialPromptDriver, InitialPromptOutcome, InitialPromptRequest,
@@ -385,13 +385,14 @@ impl SessionWorkers {
         if details.binding.incarnation != binding.incarnation {
             return Err(SessionError::StaleBinding);
         }
+        let key = RecordKey::for_snapshot(&details.snapshot);
         record.provider = details.snapshot.provider;
         record.cwd = details.snapshot.cwd;
         record.branch = details.snapshot.branch;
         record.model = details.snapshot.model;
         record.subscription_id = details.snapshot.subscription_profile_id;
         self.handoff
-            .append(binding.session.0, record, Timestamp::now())
+            .append(key, record, Timestamp::now())
             .map_err(|_| storage_error("handoff record append failed"))
     }
     pub fn start(self: &Arc<Self>) -> Result<SessionWorkerGuard, SessionError> {

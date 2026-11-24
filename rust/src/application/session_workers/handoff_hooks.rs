@@ -60,7 +60,8 @@ impl HandoffHttpHooks for SessionWorkers {
         if self.paths.is_trial() {
             transcript_path::check_trial_path(&self.paths, &path)?;
         }
-        let records = match self.handoff.read_session(id.0) {
+        let key = RecordKey::for_snapshot(&details.snapshot);
+        let records = match self.handoff.read_session(&key) {
             Ok(records) => records,
             Err(_) => return Ok(()),
         };
@@ -71,7 +72,7 @@ impl HandoffHttpHooks for SessionWorkers {
         let snapshot = details.snapshot;
         self.handoff
             .append(
-                id.0,
+                key,
                 Record {
                     kind: KIND_TRANSCRIPT.into(),
                     transcript: text,
@@ -96,9 +97,11 @@ impl HandoffHttpHooks for SessionWorkers {
             if !cfg.handoff.enabled_or_default() {
                 return Err("handoff_disabled");
             }
+            let core = self.core().map_err(|_| "session_not_writable")?;
+            let details = core.details(id).ok_or("session_not_writable")?;
             let path = self
                 .handoff
-                .note_path_for(id.0)
+                .note_path_for(RecordKey::for_snapshot(&details.snapshot))
                 .map_err(|_| "note_path_unavailable")?;
             if crate::files::safe_fs::Dir::open_or_create_private_components(
                 path.parent().ok_or("note_path_unavailable")?,
@@ -110,8 +113,7 @@ impl HandoffHttpHooks for SessionWorkers {
                     &storage_error("private memo directory unavailable"),
                 );
             }
-            let core = self.core().map_err(|_| "session_not_writable")?;
-            let binding = core.details(id).ok_or("session_not_writable")?.binding;
+            let binding = details.binding;
             let timer = self
                 .tasks
                 .effect_permit()

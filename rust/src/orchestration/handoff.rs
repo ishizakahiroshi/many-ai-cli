@@ -180,6 +180,86 @@ impl GoWire for Record {
         ],
     }];
 }
+/// The name one launch's handoff records go under (#44). New launches use
+/// `YYYYMMDD-N`: the day the Hub gave out the number and the number shown on
+/// screen, so the same small number given out again on another day, or after
+/// a Hub restart, never reaches an earlier launch's file. Files written before
+/// dated names are a bare `N`; they are read as they are and never renamed.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RecordKey {
+    day: Option<String>,
+    number: i64,
+}
+impl RecordKey {
+    pub fn dated(day: &str, number: i64) -> Option<Self> {
+        (is_record_day(day) && number > 0).then(|| Self {
+            day: Some(day.to_owned()),
+            number,
+        })
+    }
+    pub fn legacy(number: i64) -> Self {
+        Self { day: None, number }
+    }
+    /// `20261116-6` or `6`, exactly as it appears after the `s` of a file name.
+    pub fn parse(text: &str) -> Option<Self> {
+        let digits = |text: &str| {
+            (!text.is_empty() && text.len() <= 18 && text.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| text.parse::<i64>().ok())
+                .flatten()
+                .filter(|number| *number > 0)
+        };
+        match text.split_once('-') {
+            Some((day, number)) => Self::dated(day, digits(number)?),
+            None => digits(text).map(Self::legacy),
+        }
+    }
+    /// The key the Hub gave a live session. A snapshot built without one (tests,
+    /// older callers) falls back to the bare number.
+    pub fn for_snapshot(snapshot: &crate::proto::core::SessionSnapshot) -> Self {
+        Self::parse(&snapshot.record_key).unwrap_or_else(|| Self::legacy(snapshot.id.0))
+    }
+    pub fn number(&self) -> i64 {
+        self.number
+    }
+    pub fn day(&self) -> Option<&str> {
+        self.day.as_deref()
+    }
+    /// File stem used by the HTTP routes and the list: `s20261116-6` or `s6`.
+    pub fn stem(&self) -> String {
+        format!("s{self}")
+    }
+}
+impl std::fmt::Display for RecordKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.day {
+            Some(day) => write!(f, "{day}-{}", self.number),
+            None => write!(f, "{}", self.number),
+        }
+    }
+}
+impl From<i64> for RecordKey {
+    fn from(number: i64) -> Self {
+        Self::legacy(number)
+    }
+}
+impl From<&RecordKey> for RecordKey {
+    fn from(key: &RecordKey) -> Self {
+        key.clone()
+    }
+}
+fn is_record_day(day: &str) -> bool {
+    day.len() == 8
+        && day.bytes().all(|b| b.is_ascii_digit())
+        && chrono::NaiveDate::parse_from_str(day, "%Y%m%d").is_ok()
+}
+/// The wall-clock day (`YYYYMMDD`) of an RFC 3339 time as it is written, in
+/// the offset it carries. The Hub writes start times in its local offset, so
+/// this is the local day the number was given out on.
+pub fn record_day(rfc3339: &str) -> Option<String> {
+    crate::proto::time::parse_rfc3339(rfc3339).ok()?;
+    let day: String = rfc3339.get(..10)?.chars().filter(|c| *c != '-').collect();
+    is_record_day(&day).then_some(day)
+}
 pub fn sanitize(mut record: Record) -> Record {
     record.text = mask_secrets(&record.text);
     if record.text.chars().count() > TEXT_MAX_RUNES {
@@ -197,7 +277,7 @@ pub struct HandoffStore {
     paths: RuntimePaths,
     /// Last transcript path appended per session. The transcript file changes
     /// constantly while the path rarely does; repeating it only grows the file.
-    last_transcript: Arc<Mutex<HashMap<i64, String>>>,
+    last_transcript: Arc<Mutex<HashMap<RecordKey, String>>>,
 }
 impl HandoffStore {
     pub fn new(paths: RuntimePaths) -> Self {
@@ -209,29 +289,106 @@ impl HandoffStore {
     pub fn directory(&self) -> PathBuf {
         self.paths.resource(Resource::Handoff)
     }
-    fn path(&self, id: i64, suffix: &str) -> io::Result<PathBuf> {
+    fn path(&self, key: &RecordKey, suffix: &str) -> io::Result<PathBuf> {
         self.paths
-            .checked_child(Resource::Handoff, Path::new(&format!("s{id}{suffix}")))
+            .checked_child(Resource::Handoff, Path::new(&format!("s{key}{suffix}")))
     }
-    pub fn path_for(&self, id: i64) -> io::Result<PathBuf> {
-        self.path(id, ".jsonl")
+    pub fn path_for(&self, key: impl Into<RecordKey>) -> io::Result<PathBuf> {
+        self.path(&key.into(), ".jsonl")
     }
-    pub fn rendered_path_for(&self, id: i64) -> io::Result<PathBuf> {
-        self.path(id, "_handoff.md")
+    pub fn rendered_path_for(&self, key: impl Into<RecordKey>) -> io::Result<PathBuf> {
+        self.path(&key.into(), "_handoff.md")
     }
-    pub fn note_path_for(&self, id: i64) -> io::Result<PathBuf> {
-        self.path(id, ".note.md")
+    pub fn note_path_for(&self, key: impl Into<RecordKey>) -> io::Result<PathBuf> {
+        self.path(&key.into(), ".note.md")
     }
-    pub fn manual_note_path_for(&self, id: i64) -> io::Result<PathBuf> {
-        self.path(id, ".manual.note.md")
+    pub fn manual_note_path_for(&self, key: impl Into<RecordKey>) -> io::Result<PathBuf> {
+        self.path(&key.into(), ".manual.note.md")
+    }
+    fn record_names(&self) -> Vec<(RecordKey, String)> {
+        let Ok(directory) = Dir::open(&self.directory()) else {
+            return vec![];
+        };
+        directory
+            .entries()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|name| {
+                let key = RecordKey::parse(name.strip_prefix('s')?.strip_suffix(".jsonl")?)?;
+                Some((key, name))
+            })
+            .collect()
+    }
+    /// The highest session number that already has records on `day`. A Hub
+    /// started again on the same day numbers new sessions above it (#44).
+    pub fn highest_number_on(&self, day: &str) -> i64 {
+        self.record_names()
+            .into_iter()
+            .filter(|(key, _)| key.day() == Some(day))
+            .map(|(key, _)| key.number())
+            .max()
+            .unwrap_or(0)
+    }
+    /// The newest record file shown as `#number`: the latest dated one, else
+    /// a bare-number file left by an earlier version.
+    pub fn latest_key_for_number(&self, number: i64) -> Option<RecordKey> {
+        let keys: Vec<RecordKey> = self
+            .record_names()
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key.number() == number)
+            .collect();
+        keys.iter()
+            .filter(|key| key.day().is_some())
+            .max()
+            .or_else(|| keys.iter().find(|key| key.day().is_none()))
+            .cloned()
+    }
+    /// Whether a wrapper coming back as `number` is the launch an earlier
+    /// version recorded in the bare-number file: its latest start names the
+    /// same provider and folder and was written within two minutes of the
+    /// wrapper's own start time. Such a launch keeps writing there, so a Hub
+    /// upgraded while it runs does not cut its handoff in two.
+    pub fn continues_legacy_launch(
+        &self,
+        number: i64,
+        started_at: &str,
+        provider: &str,
+        cwd: &str,
+    ) -> bool {
+        let Ok(started) = crate::proto::time::parse_rfc3339(started_at) else {
+            return false;
+        };
+        let Ok(records) = self.read_current_session(RecordKey::legacy(number)) else {
+            return false;
+        };
+        records.first().is_some_and(|start| {
+            start.kind == KIND_SESSION_START
+                && start.provider == provider
+                && start.cwd == cwd
+                && crate::proto::time::parse_rfc3339(&start.ts).is_ok_and(|ts| {
+                    let gap = if ts >= started {
+                        ts.duration_since(started)
+                    } else {
+                        started.duration_since(ts)
+                    };
+                    gap.is_ok_and(|gap| gap <= Duration::from_secs(120))
+                })
+        })
     }
     /// Append one encoded record to the caller-selected store. The kernel append
     /// handle preserves prior bytes without reading them. Callers must perform
     /// this blocking IO outside their session/Hub state locks.
-    pub fn append(&self, session_id: i64, mut record: Record, now: Timestamp) -> io::Result<()> {
+    pub fn append(
+        &self,
+        key: impl Into<RecordKey>,
+        mut record: Record,
+        now: Timestamp,
+    ) -> io::Result<()> {
+        let key = key.into();
         record.version = RECORD_VERSION;
         if record.session_id == 0 {
-            record.session_id = session_id;
+            record.session_id = key.number();
         }
         if record.ts.trim().is_empty() {
             record.ts = format_rfc3339(now).map_err(io::Error::other)?;
@@ -250,19 +407,19 @@ impl HandoffStore {
             self.last_transcript
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .remove(&session_id);
+                .remove(&key);
         }
         if let Some(path) = &transcript {
             let mut last = self
                 .last_transcript
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            if last.get(&session_id) == Some(path) {
+            if last.get(&key) == Some(path) {
                 return Ok(());
             }
-            last.insert(session_id, path.clone());
+            last.insert(key.clone(), path.clone());
         }
-        let path = self.path_for(session_id)?;
+        let path = self.path_for(&key)?;
         private_io::open_append(&path)?.write_all(&line)
     }
     /// Drops transcript records that repeat the previous transcript path in the
@@ -302,32 +459,33 @@ impl HandoffStore {
         }
         Ok(reclaimed)
     }
-    pub fn read_session(&self, id: i64) -> io::Result<Vec<Record>> {
-        match read_all(&self.path_for(id)?) {
+    pub fn read_session(&self, key: impl Into<RecordKey>) -> io::Result<Vec<Record>> {
+        match read_all(&self.path_for(key)?) {
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
             other => other,
         }
     }
     /// Records of the latest launch only (see `records_from_last_session_start`).
     /// The file itself is left untouched.
-    pub fn read_current_session(&self, id: i64) -> io::Result<Vec<Record>> {
-        let mut records = self.read_session(id)?;
+    pub fn read_current_session(&self, key: impl Into<RecordKey>) -> io::Result<Vec<Record>> {
+        let mut records = self.read_session(key)?;
         let start = records.len() - records_from_last_session_start(&records).len();
         records.drain(..start);
         Ok(records)
     }
-    pub fn write_rendered(&self, id: i64) -> io::Result<(PathBuf, String)> {
-        let path = self.rendered_path_for(id)?;
+    pub fn write_rendered(&self, key: impl Into<RecordKey>) -> io::Result<(PathBuf, String)> {
+        let key = key.into();
+        let path = self.rendered_path_for(&key)?;
         // Hold the same directory for both the source and the replacement. A
         // concurrent root rename cannot redirect either operation elsewhere.
         let directory = Dir::open_or_create_private_components(&self.directory())?;
-        let records = match directory.open_file(&format!("s{id}.jsonl"), false) {
+        let records = match directory.open_file(&format!("s{key}.jsonl"), false) {
             Ok(file) => read_records(file)?,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
             Err(e) => return Err(e),
         };
-        let markdown = render_markdown(id, &records);
-        directory.replace(&format!("s{id}_handoff.md"), markdown.as_bytes(), 0o600)?;
+        let markdown = render_markdown_for(&key, &records);
+        directory.replace(&format!("s{key}_handoff.md"), markdown.as_bytes(), 0o600)?;
         Ok((path, markdown))
     }
     pub fn prune_older_than(&self, cutoff: Timestamp) -> io::Result<()> {
@@ -381,6 +539,20 @@ impl HandoffStore {
         }
         status.exists = status.files > 0;
         Ok(status)
+    }
+}
+impl crate::terminal::session::SessionRecordIndex for HandoffStore {
+    fn highest_number_on(&self, day: &str) -> i64 {
+        HandoffStore::highest_number_on(self, day)
+    }
+    fn continues_legacy_launch(
+        &self,
+        number: i64,
+        started_at: &str,
+        provider: &str,
+        cwd: &str,
+    ) -> bool {
+        HandoffStore::continues_legacy_launch(self, number, started_at, provider, cwd)
     }
 }
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
@@ -507,7 +679,18 @@ pub fn end_follows_start(start: &str, end: &str) -> bool {
 }
 
 /// Pure rendering; only recorded path strings are displayed, never opened.
-pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
+pub fn render_markdown(session_id: i64, records: &[Record]) -> String {
+    render(session_id, None, records)
+}
+
+/// Like `render_markdown`, naming the dated record so a reader can tell two
+/// launches shown as the same `#N` on different days apart (#44). A bare-number
+/// key renders exactly as `render_markdown`.
+pub fn render_markdown_for(key: &RecordKey, records: &[Record]) -> String {
+    render(key.number(), key.day().map(|_| key), records)
+}
+
+fn render(mut session_id: i64, dated: Option<&RecordKey>, records: &[Record]) -> String {
     use std::fmt::Write;
     let records = records_from_last_session_start(records);
     let model = model_from_segment(records);
@@ -544,6 +727,9 @@ pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
         session_id = start.session_id;
     }
     let mut out = format!("# 引き継ぎ: セッション #{session_id}\n\n## セッションの素性\n");
+    if let Some(key) = dated {
+        writeln!(out, "- 記録: {}.jsonl", key.stem()).unwrap();
+    }
     if let Some(start) = start {
         for (label, value) in [
             ("provider", start.provider.as_str()),
@@ -616,7 +802,11 @@ pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     if let Some(start) = start
         && start.handoff_from != 0
     {
-        writeln!(out, "4. このセッション自身も別セッション（#{}）からの引き継ぎである。さらに遡って読みたい場合は看板ディレクトリの s{}.jsonl を確認する。", start.handoff_from, start.handoff_from).unwrap();
+        if dated.is_some() {
+            writeln!(out, "4. このセッション自身も別セッション（#{}）からの引き継ぎである。さらに遡って読みたい場合は看板ディレクトリの s<日付>-{}.jsonl（古い版の記録は s{}.jsonl）を確認する。", start.handoff_from, start.handoff_from, start.handoff_from).unwrap();
+        } else {
+            writeln!(out, "4. このセッション自身も別セッション（#{}）からの引き継ぎである。さらに遡って読みたい場合は看板ディレクトリの s{}.jsonl を確認する。", start.handoff_from, start.handoff_from).unwrap();
+        }
     }
     out
 }
@@ -1050,5 +1240,189 @@ mod last_session_render_tests {
         );
         assert!(!markdown.contains("- model:"), "{markdown}");
         assert!(!markdown.contains("- 終了:"), "{markdown}");
+    }
+}
+
+#[cfg(test)]
+mod record_key_tests {
+    //! Issue #44: records are named by the day the number was given out and
+    //! the number, so the same `#N` on another day never shares a file.
+    use super::*;
+
+    fn store() -> (tempfile::TempDir, tempfile::TempDir, HandoffStore) {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49122, installed.path()).unwrap();
+        (root, installed, HandoffStore::new(paths))
+    }
+    fn start(cwd: &str, ts: &str) -> Record {
+        Record {
+            kind: KIND_SESSION_START.into(),
+            provider: "codex".into(),
+            cwd: cwd.into(),
+            ts: ts.into(),
+            ..Record::default()
+        }
+    }
+    fn done(text: &str) -> Record {
+        Record {
+            kind: KIND_DONE.into(),
+            text: text.into(),
+            ..Record::default()
+        }
+    }
+
+    #[test]
+    fn keys_read_and_write_as_the_file_names_do() {
+        let dated = RecordKey::parse("20261116-6").unwrap();
+        assert_eq!(dated.number(), 6);
+        assert_eq!(dated.day(), Some("20261116"));
+        assert_eq!(dated.to_string(), "20261116-6");
+        assert_eq!(dated.stem(), "s20261116-6");
+        let legacy = RecordKey::parse("6").unwrap();
+        assert_eq!((legacy.number(), legacy.day()), (6, None));
+        assert_eq!(legacy.stem(), "s6");
+        for bad in [
+            "",
+            "0",
+            "-6",
+            "2026111-6",
+            "20261116-",
+            "20261116-0",
+            "20261332-1",
+            "x",
+            "6.5",
+            "20261116-6-1",
+            "1234567890123456789",
+        ] {
+            assert!(RecordKey::parse(bad).is_none(), "{bad}");
+        }
+        assert_eq!(
+            record_day("2026-11-16T23:59:59+09:00").as_deref(),
+            Some("20261116")
+        );
+        assert_eq!(record_day("not a time"), None);
+        // Dated keys sort after bare numbers, by day and then number.
+        let mut keys = [
+            RecordKey::legacy(9),
+            RecordKey::dated("20261116", 2).unwrap(),
+            RecordKey::dated("20261117", 1).unwrap(),
+            RecordKey::dated("20261116", 10).unwrap(),
+        ];
+        keys.sort_by(|a, b| b.cmp(a));
+        let names: Vec<_> = keys.iter().map(ToString::to_string).collect();
+        assert_eq!(names, ["20261117-1", "20261116-10", "20261116-2", "9"]);
+    }
+
+    #[test]
+    fn the_same_number_on_another_day_never_reads_an_earlier_launch() {
+        // The reported case (#44): #6 of an earlier launch and #6 given out
+        // again after a restart. Each launch writes and reads its own file.
+        let (_root, _installed, store) = store();
+        let now = Timestamp::now();
+        let old = RecordKey::legacy(6);
+        store
+            .append(&old, start("/old", "2026-10-01T09:00:00+09:00"), now)
+            .unwrap();
+        store.append(&old, done("OLD-LAUNCH-DONE"), now).unwrap();
+        let earlier = RecordKey::dated("20261115", 6).unwrap();
+        store
+            .append(
+                &earlier,
+                start("/earlier", "2026-11-15T09:00:00+09:00"),
+                now,
+            )
+            .unwrap();
+        store.append(&earlier, done("EARLIER-DONE"), now).unwrap();
+        let before_old = std::fs::read(store.path_for(&old).unwrap()).unwrap();
+
+        let current = RecordKey::dated("20261116", 6).unwrap();
+        store
+            .append(&current, start("/new", "2026-11-16T09:00:00+09:00"), now)
+            .unwrap();
+        store.append(&current, done("NEW-DONE"), now).unwrap();
+        let (path, markdown) = store.write_rendered(&current).unwrap();
+        assert!(
+            path.ends_with("s20261116-6_handoff.md"),
+            "{}",
+            path.display()
+        );
+        assert!(markdown.contains("# 引き継ぎ: セッション #6"), "{markdown}");
+        assert!(markdown.contains("- 記録: s20261116-6.jsonl"), "{markdown}");
+        assert!(markdown.contains("NEW-DONE"), "{markdown}");
+        for old in ["OLD-LAUNCH-DONE", "/old", "EARLIER-DONE", "/earlier"] {
+            assert!(!markdown.contains(old), "{old} leaked into:\n{markdown}");
+        }
+        // Each record keeps the number shown on screen.
+        assert!(
+            store
+                .read_session(&current)
+                .unwrap()
+                .iter()
+                .all(|r| r.session_id == 6)
+        );
+        // The file left by an earlier version is neither changed nor removed,
+        // and still renders exactly as before.
+        assert_eq!(
+            std::fs::read(store.path_for(&old).unwrap()).unwrap(),
+            before_old
+        );
+        let (_, legacy) = store.write_rendered(&old).unwrap();
+        assert_eq!(
+            legacy,
+            render_markdown(6, &store.read_session(&old).unwrap())
+        );
+        assert!(!legacy.contains("- 記録:"), "{legacy}");
+    }
+
+    #[test]
+    fn the_newest_record_and_the_days_highest_number_are_found_by_name() {
+        let (_root, _installed, store) = store();
+        assert_eq!(store.highest_number_on("20261116"), 0);
+        assert_eq!(store.latest_key_for_number(6), None);
+        let now = Timestamp::now();
+        for key in ["6", "20261115-6", "20261116-6", "20261116-12", "20261117-3"] {
+            store
+                .append(RecordKey::parse(key).unwrap(), done(key), now)
+                .unwrap();
+        }
+        std::fs::write(store.directory().join("s20261116-99.note.md"), b"memo").unwrap();
+        std::fs::write(store.directory().join("s20261116-x.jsonl"), b"").unwrap();
+        assert_eq!(store.highest_number_on("20261116"), 12);
+        assert_eq!(store.highest_number_on("20261117"), 3);
+        assert_eq!(store.highest_number_on("20261118"), 0);
+        assert_eq!(
+            store.latest_key_for_number(6).map(|key| key.to_string()),
+            Some("20261116-6".into())
+        );
+        assert_eq!(
+            store.latest_key_for_number(3).map(|key| key.to_string()),
+            Some("20261117-3".into())
+        );
+        store
+            .append(RecordKey::legacy(7), done("only legacy"), now)
+            .unwrap();
+        assert_eq!(store.latest_key_for_number(7), Some(RecordKey::legacy(7)));
+    }
+
+    #[test]
+    fn only_the_same_launch_continues_a_bare_number_file() {
+        let (_root, _installed, store) = store();
+        let now = Timestamp::now();
+        store
+            .append(6, start("/old", "2026-11-01T09:00:00+09:00"), now)
+            .unwrap();
+        store
+            .append(6, start("/work", "2026-11-16T09:00:01+09:00"), now)
+            .unwrap();
+        let started = "2026-11-16T09:00:00+09:00";
+        assert!(store.continues_legacy_launch(6, started, "codex", "/work"));
+        // Same time written in another offset is the same instant.
+        assert!(store.continues_legacy_launch(6, "2026-11-16T00:00:30Z", "codex", "/work"));
+        assert!(!store.continues_legacy_launch(6, started, "claude", "/work"));
+        assert!(!store.continues_legacy_launch(6, started, "codex", "/old"));
+        assert!(!store.continues_legacy_launch(6, "2026-11-16T09:10:00+09:00", "codex", "/work"));
+        assert!(!store.continues_legacy_launch(6, "not a time", "codex", "/work"));
+        assert!(!store.continues_legacy_launch(7, started, "codex", "/work"));
     }
 }

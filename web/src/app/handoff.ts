@@ -210,6 +210,11 @@ function buildDialogShell(titleKey: string, titleFallback: string, extraClass = 
 
 interface HandoffListEntry {
   session_id: number;
+  /**
+   * 記録の名前（例 s20261116-6。古い版の記録は s6）。同じ #番号が別の日にも
+   * 出るので、一覧の行はこれで開く（#44）。
+   */
+  record?: string;
   provider?: string;
   cwd?: string;
   branch?: string;
@@ -311,7 +316,8 @@ export async function openHandoffListDialog(): Promise<void> {
         : '';
       // model は行を狭めてまで常設するほどではないので provider 名の tooltip に載せる。
       const providerTitleAttr = entry.model ? ` title="${escapeHtml(entry.model)}"` : '';
-      main.innerHTML = `<span class="handoff-list-row-id">#${escapeHtml(String(entry.session_id))}</span>` +
+      const recordTitle = entry.record ? ` title="${escapeHtml(entry.record)}"` : '';
+      main.innerHTML = `<span class="handoff-list-row-id"${recordTitle}>#${escapeHtml(String(entry.session_id))}</span>` +
         `<span class="handoff-list-row-provider"${providerTitleAttr}>${escapeHtml(label)}</span>` +
         `<span class="handoff-list-row-status" data-live="${entry.live ? '1' : '0'}">${escapeHtml(status)}</span>` +
         predecessorHtml + successorHtml + branchHtml + startedHtml + endedHtml +
@@ -324,7 +330,7 @@ export async function openHandoffListDialog(): Promise<void> {
         close();
         // 一覧の行からも派生ダイアログ（種別 = 引き継ぎ）を開く。看板 markdown は
         // そちらが自分で取りに行くので、ここでプレビューを組み立てない。
-        void openDeriveDialog(entry.session_id, { kind: 'handoff' });
+        void openDeriveDialog(entry.session_id, { kind: 'handoff', record: entry.record });
       });
       row.append(main, previewBtn);
       // 前任 / 後継チップはこの一覧の中でその番号のプレビューへ飛べるようにする

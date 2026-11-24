@@ -131,6 +131,13 @@ Release artifacts are published at
 - Board notices and relay nudges wait for an approval prompt on the screen,
   including one that appeared while the wrapper was disconnected; input held
   only because the session is not ready yet is sent later instead of dropped.
+- **A session number given out again no longer adds to an earlier session's
+  handoff records.** Session numbers are now the day's running count: a Hub
+  restarted on the same day continues above that day's numbers, and a new day
+  starts from 1 while skipping numbers still on screen. Handoff records are
+  named by day and number (`s20261116-6.jsonl`), and the handoff list opens
+  each one by that name. Records written by earlier versions are read as they
+  are and are not renamed or rewritten (#44).
 
 ### Security
 

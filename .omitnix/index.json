@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "8ca3ee2ba228a567fa2b37583c46b54f2175dc67",
+    "commit": "bedfe3ea00c1e309dd2aa3e08d9bc8bd046feaa9",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2146,
-    "analyzed": 1684,
+    "discovered": 2147,
+    "analyzed": 1685,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -37175,6 +37175,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/session/numbering_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Issue #44: the number on screen is the day's running count, and the"
         },
         "authentication": {
           "state": "not_configured"

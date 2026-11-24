@@ -891,6 +891,9 @@ impl Session {
 #[path = "acp_gate_tests.rs"]
 mod acp_gate_tests;
 #[cfg(test)]
+#[path = "numbering_tests.rs"]
+mod numbering_tests;
+#[cfg(test)]
 #[path = "observer_tests.rs"]
 mod observer_tests;
 #[cfg(test)]

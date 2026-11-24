@@ -351,6 +351,11 @@ pub struct SessionSnapshot {
         skip_serializing_if = "String::is_empty"
     )]
     pub jsonl_path: String,
+    /// Rust-only name of this launch's handoff records (`YYYYMMDD-N`, or a
+    /// bare `N` for a launch an earlier version recorded). Given out by the
+    /// Hub with the number; never sent to the UI or read from a wire (#44).
+    #[serde(skip)]
+    pub record_key: String,
 }
 
 /// Source: `internal/sessionstore/store.go`, `SessionStart`.

@@ -1,5 +1,7 @@
 use crate::{
-    files::WorkspaceReads, orchestration::handoff::HandoffStore, routine::memo::MemoManager,
+    files::WorkspaceReads,
+    orchestration::handoff::{HandoffStore, RecordKey},
+    routine::memo::MemoManager,
 };
 use std::{path::Path, sync::Arc};
 pub(super) struct Workspace {
@@ -25,16 +27,14 @@ impl WorkspaceReads for Workspace {
         } else {
             return false;
         };
-        let Ok(id) = id.parse::<i64>() else {
+        // `s20261116-6.note.md` for dated records, `s6.note.md` for older ones.
+        let Some(key) = RecordKey::parse(id) else {
             return false;
         };
-        if id <= 0 {
-            return false;
-        }
         let expected = if manual {
-            self.handoff.manual_note_path_for(id)
+            self.handoff.manual_note_path_for(&key)
         } else {
-            self.handoff.note_path_for(id)
+            self.handoff.note_path_for(&key)
         };
         let Ok(expected) = expected else {
             return false;
@@ -49,7 +49,7 @@ impl WorkspaceReads for Workspace {
             return false;
         }
         self.handoff
-            .read_session(id)
+            .read_session(key)
             .is_ok_and(|records| records.iter().any(|record| Path::new(&record.note) == path))
     }
 }

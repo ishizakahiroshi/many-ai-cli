@@ -456,3 +456,126 @@ async fn preview_keeps_what_was_recorded_before_a_reattach() {
     assert_eq!(preview["note_path"], note.as_str());
     assert!(preview["markdown"].as_str().unwrap().contains(&note));
 }
+
+#[tokio::test]
+async fn the_same_number_on_several_days_lists_and_opens_each_launch_by_its_record() {
+    // #44: `#6` can stand for launches on several days. The list names each by
+    // its record, and opening a record shows that launch only.
+    let f = fixture();
+    for (key, cwd, ts) in [
+        ("6", "/legacy", "2026-10-01T09:00:00+09:00"),
+        ("20261115-6", "/day-15", "2026-11-15T09:00:00+09:00"),
+        ("20261116-6", "/day-16", "2026-11-16T09:00:00+09:00"),
+        ("20261116-2", "/other", "2026-11-16T08:00:00+09:00"),
+    ] {
+        f.http
+            .store
+            .append(
+                RecordKey::parse(key).unwrap(),
+                Record {
+                    kind: KIND_SESSION_START.into(),
+                    provider: "codex".into(),
+                    cwd: cwd.into(),
+                    ts: ts.into(),
+                    ..Default::default()
+                },
+                now(),
+            )
+            .unwrap();
+    }
+    let list = value(
+        f.http
+            .handle_authenticated(&request("GET", PATH, ""), now())
+            .await
+            .unwrap(),
+    );
+    let entries = list["entries"].as_array().unwrap();
+    let listed: Vec<_> = entries
+        .iter()
+        .map(|e| {
+            (
+                e["record"].as_str().unwrap(),
+                e["session_id"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("s20261116-6", 6),
+            ("s20261116-2", 2),
+            ("s20261115-6", 6),
+            ("s6", 6)
+        ]
+    );
+    for (path, cwd) in [
+        ("/api/handoff/s20261115-6", "/day-15"),
+        ("/api/handoff/s6", "/legacy"),
+        // A bare number with no live session opens its newest records.
+        ("/api/handoff/6", "/day-16"),
+    ] {
+        let preview = value(
+            f.http
+                .handle_authenticated(&request("GET", path, ""), now())
+                .await
+                .unwrap(),
+        );
+        assert_eq!(preview["cwd"], cwd, "{path}: {preview}");
+        assert_eq!(preview["live"], false);
+        let markdown = preview["markdown"].as_str().unwrap();
+        for other in ["/legacy", "/day-15", "/day-16"] {
+            assert_eq!(markdown.contains(other), other == cwd, "{path}: {markdown}");
+        }
+    }
+    assert!(
+        f.http
+            .store
+            .rendered_path_for(RecordKey::parse("20261115-6").unwrap())
+            .unwrap()
+            .exists()
+    );
+    // A memo saved from a listed record goes to that record, not the newest.
+    let response = f
+        .http
+        .handle_authenticated(
+            &request(
+                "POST",
+                "/api/handoff/s20261115-6/manual-note",
+                r#"{"text":"memo"}"#,
+            ),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status, 200);
+    assert!(
+        f.http
+            .store
+            .manual_note_path_for(RecordKey::parse("20261115-6").unwrap())
+            .unwrap()
+            .exists()
+    );
+    assert_eq!(
+        f.http
+            .store
+            .read_session(RecordKey::parse("20261116-6").unwrap())
+            .unwrap()
+            .len(),
+        1
+    );
+    // A record that is not the live launch cannot be asked for a memo, and
+    // malformed records are rejected like malformed numbers.
+    for (method, path, status) in [
+        ("POST", "/api/handoff/s20261115-6/note", 404),
+        ("GET", "/api/handoff/s2026-1", 400),
+        ("GET", "/api/handoff/s0", 400),
+    ] {
+        let response = f
+            .http
+            .handle_authenticated(&request(method, path, ""), now())
+            .await
+            .unwrap();
+        assert_eq!(response.status, status, "{path}");
+    }
+    assert_eq!(f.hooks.notes.load(Ordering::SeqCst), 0);
+}

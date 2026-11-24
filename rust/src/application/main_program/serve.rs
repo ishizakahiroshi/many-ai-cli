@@ -608,6 +608,7 @@ impl HubComposition {
                     paths.clone(),
                 )),
                 confirmation_executor: Some(child_executor.clone()),
+                record_index: Some(Arc::new(HandoffStore::new(paths.clone()))),
                 ..Default::default()
             },
             journal.clone(),

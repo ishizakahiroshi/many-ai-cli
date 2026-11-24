@@ -4,8 +4,8 @@ use crate::{
     config::{ConfigStore, RuntimePaths},
     files::safe_fs::Dir,
     orchestration::handoff::{
-        HandoffStore, KIND_NOTE, KIND_SESSION_END, KIND_SESSION_START, Record, end_follows_start,
-        model_from_segment,
+        HandoffStore, KIND_NOTE, KIND_SESSION_END, KIND_SESSION_START, Record, RecordKey,
+        end_follows_start, model_from_segment,
     },
     proto::{core::*, time::Timestamp},
     storage::mask_secrets,
@@ -38,6 +38,10 @@ pub struct HandoffHttp {
 struct Preview {
     ok: bool,
     session_id: i64,
+    /// File stem of the records shown (`s20261116-6`, or `s6` for records an
+    /// earlier version wrote). Two launches shown as the same `#N` on
+    /// different days differ here; the UI opens a listed one by this (#44).
+    record: String,
     exists: bool,
     live: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -76,6 +80,18 @@ fn id(value: &str) -> Option<i64> {
         .ok()
         .filter(|id| *id > 0)
         .map(|id| id as i64)
+}
+/// What a request names: a session number as shown on screen, or one record
+/// by its file stem (`s20261116-6` / `s6`).
+enum Target {
+    Number(i64),
+    Record(RecordKey),
+}
+fn target(value: &str) -> Option<Target> {
+    match value.strip_prefix('s') {
+        Some(stem) => RecordKey::parse(stem).map(Target::Record),
+        None => id(value).map(Target::Number),
+    }
 }
 pub fn methods(path: &str) -> &'static [&'static str] {
     if path == PATH {
@@ -127,10 +143,18 @@ impl HandoffHttp {
         if !matches!(action, "" | "note" | "manual-note") {
             return Some(Response::error(404, "not_found", "unknown handoff action"));
         }
-        let Some(id) = id(raw) else {
+        let Some(target) = target(raw) else {
             return Some(Response::error(400, "bad_request", "invalid session id"));
         };
+        let named_record = matches!(target, Target::Record(_));
+        let key = self.resolve(target);
+        let id = key.number();
         Some(match action {
+            // Only the live launch can write its memo; an earlier launch
+            // named by its record under the same number cannot (#44).
+            "note" if named_record && !self.is_live(&key) => {
+                Response::error(404, "session_not_writable", "handoff note request rejected")
+            }
             "note" => match self.hooks.request_note(LiveSessionId(id), now).await {
                 Ok(path) => Response::json(200, &serde_json::json!({"ok":true,"note_path":path})),
                 Err(reason) => Response::error(
@@ -161,17 +185,19 @@ impl HandoffHttp {
                         }];
                 }
                 match decode_json::<Body>(request) {
-                    Ok(body) => self.manual_note(id, &body.text, now),
+                    Ok(body) => self.manual_note(&key, &body.text, now),
                     Err(error) => error,
                 }
             }
             _ => {
+                // Writes only to the live launch's own records, if any.
                 let _ = self.hooks.ensure_transcript(LiveSessionId(id), now);
-                match self.identity(id).and_then(|mut preview| {
+                let live = self.is_live(&key);
+                match self.identity(&key).and_then(|mut preview| {
                     if preview.exists {
-                        preview.markdown = self.store.write_rendered(id)?.1;
+                        preview.markdown = self.store.write_rendered(&key)?.1;
                     }
-                    preview.live = self.core.snapshot(LiveSessionId(id)).is_some();
+                    preview.live = live;
                     preview.candidate_providers = crate::profile::declared::handoff_candidates();
                     Ok(preview)
                 }) {
@@ -185,13 +211,34 @@ impl HandoffHttp {
             }
         })
     }
-    fn identity(&self, id: i64) -> io::Result<Preview> {
+    /// The records a request means. A bare number is the live session's own
+    /// launch when one is on screen, else the newest records under that number.
+    fn resolve(&self, target: Target) -> RecordKey {
+        match target {
+            Target::Record(key) => key,
+            Target::Number(number) => self
+                .live_key(number)
+                .or_else(|| self.store.latest_key_for_number(number))
+                .unwrap_or_else(|| RecordKey::legacy(number)),
+        }
+    }
+    fn live_key(&self, number: i64) -> Option<RecordKey> {
+        self.core
+            .snapshot(LiveSessionId(number))
+            .map(|snapshot| RecordKey::for_snapshot(&snapshot))
+    }
+    /// Whether these records belong to the launch on screen under their number.
+    fn is_live(&self, key: &RecordKey) -> bool {
+        self.live_key(key.number()).as_ref() == Some(key)
+    }
+    fn identity(&self, key: &RecordKey) -> io::Result<Preview> {
         // Same launch as the rendered handoff: a reused session number can
         // leave earlier launches in the same file (#46). They stay on disk.
-        let records = self.store.read_current_session(id)?;
+        let records = self.store.read_current_session(key)?;
         let mut preview = Preview {
             ok: true,
-            session_id: id,
+            session_id: key.number(),
+            record: key.stem(),
             exists: !records.is_empty(),
             // Like the rendered handoff, the model is shown only with a start.
             model: if records.iter().any(|r| r.kind == KIND_SESSION_START) {
@@ -254,7 +301,7 @@ impl HandoffHttp {
                 );
             }
         };
-        let mut ids = vec![];
+        let mut keys = vec![];
         for name in names {
             if directory
                 .metadata(&name)
@@ -262,36 +309,61 @@ impl HandoffHttp {
             {
                 continue;
             }
-            if let Some(name) = name.strip_suffix(".jsonl")
-                && let Ok(id) = name.strip_prefix('s').unwrap_or(name).parse::<isize>()
+            // `s20261116-6.jsonl` and, from earlier versions, `s6.jsonl`.
+            if let Some(stem) = name.strip_suffix(".jsonl")
+                && let Some(key) = RecordKey::parse(stem.strip_prefix('s').unwrap_or(stem))
             {
-                ids.push(id as i64);
+                keys.push(key);
             }
         }
-        ids.sort_by(|a, b| b.cmp(a));
-        let mut entries: Vec<_> = ids
-            .into_iter()
-            .filter_map(|id| self.identity(id).ok().filter(|preview| preview.exists))
+        // Newest day first, larger numbers first within a day; records from
+        // before dated names come after every dated one.
+        keys.sort_by(|a, b| b.cmp(a));
+        let entries: Vec<_> = keys
+            .iter()
+            .filter_map(|key| {
+                self.identity(key)
+                    .ok()
+                    .filter(|preview| preview.exists)
+                    .map(|preview| (key, preview))
+            })
             .collect();
+        // A successor names its predecessor by number only. The same number
+        // can stand for launches on several days; the predecessor is the
+        // newest of them that started no later than the successor.
         let mut successors = BTreeMap::new();
-        for entry in &entries {
-            if entry.handoff_from != 0 {
-                successors
-                    .entry(entry.handoff_from)
-                    .or_insert(entry.session_id);
+        for (_, entry) in &entries {
+            if entry.handoff_from == 0 {
+                continue;
+            }
+            let started =
+                |preview: &Preview| crate::proto::time::parse_rfc3339(&preview.started_at).ok();
+            let predecessor = entries
+                .iter()
+                .filter(|(_, candidate)| candidate.session_id == entry.handoff_from)
+                .find(
+                    |(_, candidate)| match (started(candidate), started(entry)) {
+                        (Some(before), Some(after)) => before <= after,
+                        _ => true,
+                    },
+                )
+                .map(|(key, _)| (*key).clone());
+            if let Some(predecessor) = predecessor {
+                successors.entry(predecessor).or_insert(entry.session_id);
             }
         }
-        for entry in &mut entries {
-            entry.handoff_to = successors.get(&entry.session_id).copied().unwrap_or(0);
-            entry.live = self
-                .core
-                .snapshot(LiveSessionId(entry.session_id))
-                .is_some();
-            entry.note_paths.clear();
-        }
+        let entries: Vec<Preview> = entries
+            .into_iter()
+            .map(|(key, mut entry)| {
+                entry.handoff_to = successors.get(key).copied().unwrap_or(0);
+                entry.live = self.is_live(key);
+                entry.note_paths.clear();
+                entry
+            })
+            .collect();
         Response::json(200, &serde_json::json!({"ok":true,"entries":entries}))
     }
-    fn manual_note(&self, id: i64, text: &str, now: Timestamp) -> Response {
+    fn manual_note(&self, key: &RecordKey, text: &str, now: Timestamp) -> Response {
         let result = (|| -> Result<PathBuf, &'static str> {
             if !self
                 .config
@@ -311,7 +383,7 @@ impl HandoffHttp {
             }
             if self
                 .store
-                .read_session(id)
+                .read_session(key)
                 .map_err(|_| "memo_save_failed")?
                 .is_empty()
             {
@@ -319,7 +391,7 @@ impl HandoffHttp {
             }
             let path = self
                 .store
-                .manual_note_path_for(id)
+                .manual_note_path_for(key)
                 .map_err(|_| "memo_save_failed")?;
             let body = mask_secrets(text);
             if body.trim().is_empty() {
@@ -342,7 +414,7 @@ impl HandoffHttp {
             drop(file);
             self.store
                 .append(
-                    id,
+                    key,
                     Record {
                         kind: KIND_NOTE.into(),
                         note: path.to_string_lossy().into_owned(),

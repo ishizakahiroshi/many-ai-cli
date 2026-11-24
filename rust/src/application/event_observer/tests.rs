@@ -412,6 +412,13 @@ impl WrappedSessionSpawner for NoSpawn {
         Box::pin(async { SpawnWaitOutcome::Failed("synthetic test has no provider".into()) })
     }
 }
+/// The records a session number was written under (#44): the newest dated
+/// file, else the bare-number one.
+fn recorded(handoff: &HandoffStore, number: i64) -> crate::orchestration::handoff::RecordKey {
+    handoff
+        .latest_key_for_number(number)
+        .unwrap_or_else(|| crate::orchestration::handoff::RecordKey::legacy(number))
+}
 struct Callbacks {
     handoff: HandoffStore,
     sink: Arc<Sink>,
@@ -449,7 +456,10 @@ impl GitTurnCompletionCallbacks for Callbacks {
     ) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
             assert_eq!(
-                self.handoff.read_session(binding.session.0).unwrap().len(),
+                self.handoff
+                    .read_session(recorded(&self.handoff, binding.session.0))
+                    .unwrap()
+                    .len(),
                 1
             );
             assert!(self.sink.messages.lock().unwrap().is_empty());
@@ -716,7 +726,7 @@ async fn actual_capture_handoff_summary_broadcast_callback_order_and_next_input_
     let records = f
         .callbacks
         .handoff
-        .read_session(f.binding.session.0)
+        .read_session(recorded(&f.callbacks.handoff, f.binding.session.0))
         .unwrap();
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].kind, KIND_GIT_TURN);
@@ -741,7 +751,7 @@ async fn handoff_gate_is_independent_of_capture_and_summary_requires_both_gates(
     assert!(
         f.callbacks
             .handoff
-            .read_session(f.binding.session.0)
+            .read_session(recorded(&f.callbacks.handoff, f.binding.session.0))
             .unwrap()
             .is_empty()
     );
@@ -787,7 +797,7 @@ async fn unbound_observer_fails_closed_and_snapshot_failure_is_best_effort() {
     assert!(
         f.callbacks
             .handoff
-            .read_session(f.binding.session.0)
+            .read_session(recorded(&f.callbacks.handoff, f.binding.session.0))
             .unwrap()
             .is_empty()
     );

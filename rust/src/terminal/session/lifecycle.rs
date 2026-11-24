@@ -1,4 +1,5 @@
 use super::*;
+use crate::orchestration::handoff::RecordKey;
 impl Session {
     fn spawn_correlation(&self, hub_instance: &str) -> Option<SpawnCorrelationNotification> {
         if self.snapshot.client_request_id.is_empty() || self.usage_probe {
@@ -68,14 +69,19 @@ impl SessionEngine {
             None
         };
         let started = timestamp(now)?;
+        // The number is the day's running count, and the handoff records are
+        // named by that day and number (#44).
+        let day = crate::orchestration::handoff::record_day(&started).unwrap_or_default();
+        let floor = self.numbering_floor(&day);
         let (binding, size, lease, metadata) = {
             let mut state = lock(&self.state);
+            state.enter_numbering_day(&day, floor);
             // Allocation failure must neither consume a one-use proof nor leave
             // a newly acquired provider-spawn lease behind.
             let next_id = state
-                .next_id
-                .checked_add(1)
-                .ok_or_else(|| SessionError::InvalidRequest("session identity exhausted".into()))?;
+                .next_free_number()
+                .ok_or_else(|| SessionError::InvalidRequest("session identity exhausted".into()))?
+                .0;
             let next_incarnation = state.next_incarnation.checked_add(1).ok_or_else(|| {
                 SessionError::InvalidRequest("session incarnation exhausted".into())
             })?;
@@ -141,6 +147,9 @@ impl SessionEngine {
                     return Err(error);
                 }
             };
+        session.snapshot.record_key = RecordKey::dated(&day, binding.session.0)
+            .map(|key| key.to_string())
+            .unwrap_or_default();
         let snapshot = session.snapshot.clone();
         let registered = proto::Message {
             r#type: "registered".into(),
@@ -430,7 +439,16 @@ impl SessionEngine {
         if m.session_id <= 0 {
             return Err(SessionError::InvalidRequest("invalid session_id".into()));
         }
-        if lock(&self.state).dismissed.contains(&requested) {
+        // The day this launch was numbered on. A dismissal stops only the
+        // launch it was made for, not the same number given out on a later
+        // day (#44).
+        let today = timestamp(now)
+            .ok()
+            .and_then(|text| crate::orchestration::handoff::record_day(&text))
+            .unwrap_or_default();
+        let started_day =
+            crate::orchestration::handoff::record_day(&m.started_at).unwrap_or(today.clone());
+        if lock(&self.state).dismissed_for(requested, &started_day) {
             return Err(SessionError::InvalidRequest("session dismissed".into()));
         }
         // Go's base64 decoder ignores CR/LF only.
@@ -453,11 +471,18 @@ impl SessionEngine {
             Ok(t) => (t, m.started_at.clone()),
             Err(_) => (now, reattached_at.clone()),
         };
-        let (binding, lease) = {
+        let floor = self.numbering_floor(&today);
+        // A launch an earlier version recorded under the bare number keeps
+        // writing there, so upgrading the Hub does not cut its handoff (#44).
+        let legacy = self.options.record_index.as_ref().is_some_and(|index| {
+            index.continues_legacy_launch(m.session_id, &started_text, &m.provider, &m.cwd)
+        });
+        let (binding, lease, record_key) = {
             let mut state = lock(&self.state);
-            if state.dismissed.contains(&requested) {
+            if state.dismissed_for(requested, &started_day) {
                 return Err(SessionError::InvalidRequest("session dismissed".into()));
             }
+            state.enter_numbering_day(&today, floor);
             let collision = state.sessions.get(&requested).is_some_and(|s| {
                 s.connected
                     && !(m.pid > 0
@@ -465,18 +490,30 @@ impl SessionEngine {
                         && s.snapshot.provider == m.provider
                         && s.snapshot.cwd == m.cwd)
             });
-            let id = if collision {
-                state
-                    .next_id
-                    .checked_add(1)
-                    .map(LiveSessionId)
-                    .ok_or_else(|| {
-                        SessionError::InvalidRequest("session identity exhausted".into())
-                    })?
+            let (id, record_key) = if collision {
+                // Renumbered: a new launch of today, with records of its own.
+                let id = state.next_free_number().ok_or_else(|| {
+                    SessionError::InvalidRequest("session identity exhausted".into())
+                })?;
+                state.next_id = id.0;
+                (id, RecordKey::dated(&today, id.0))
+            } else if legacy {
+                (requested, Some(RecordKey::legacy(requested.0)))
             } else {
-                requested
+                // Only a number of today moves today's count; one from an
+                // earlier day is skipped while it is in use, not counted past.
+                if started_day == today {
+                    state.next_id = state.next_id.max(requested.0);
+                }
+                (requested, RecordKey::dated(&started_day, requested.0))
             };
-            state.next_id = state.next_id.max(id.0);
+            let record_key = state
+                .sessions
+                .get(&id)
+                .map(|old| old.snapshot.record_key.clone())
+                .filter(|key| !key.is_empty())
+                .or_else(|| record_key.map(|key| key.to_string()))
+                .unwrap_or_default();
             let incarnation = if let Some(s) = state.sessions.get(&id) {
                 s.binding.incarnation
             } else {
@@ -497,6 +534,7 @@ impl SessionEngine {
                     wrapper: connection,
                 },
                 lease,
+                record_key,
             )
         };
         let size = TerminalSize {
@@ -550,8 +588,11 @@ impl SessionEngine {
                 return Err(e);
             }
         };
+        session.snapshot.record_key = record_key;
         let mut state = lock(&self.state);
-        if state.dismissed.contains(&requested) || state.revoked_relay_children.contains(&m.label) {
+        if state.dismissed_for(requested, &started_day)
+            || state.revoked_relay_children.contains(&m.label)
+        {
             state.admission.end_provider_spawn(&lease);
             drop(state);
             self.journal.close_writer(binding.session);
@@ -914,7 +955,7 @@ impl SessionEngine {
         let mut effects = CoreEffects::default();
         if let Some(mut s) = state.sessions.remove(&id) {
             if !s.connected {
-                state.dismissed.insert(id);
+                state.mark_dismissed(id, &s.snapshot.started_at);
             }
             effects
                 .0
@@ -934,7 +975,7 @@ impl SessionEngine {
                 });
             }
         } else {
-            state.dismissed.insert(id);
+            state.mark_dismissed(id, "");
         }
         state.admission.dismiss_session(id);
         state.admission.release_parent(id);

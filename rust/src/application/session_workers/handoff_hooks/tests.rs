@@ -179,6 +179,10 @@ impl Fixture {
         self.tasks.cancel_effects().unwrap();
         self.tasks.drain_effects().await;
     }
+    /// The record name the Hub gave this live session (#44).
+    fn key(&self, id: LiveSessionId) -> crate::orchestration::handoff::RecordKey {
+        crate::orchestration::handoff::RecordKey::for_snapshot(&self.core.snapshot(id).unwrap())
+    }
     async fn register(&self) -> SessionBinding {
         self.core
             .register(
@@ -216,13 +220,18 @@ async fn memo_receipt_checks_file_and_primes_real_delivery_without_reading_body(
         .unwrap();
     let priming = fixture.core.attach_ui(ui, None, None).unwrap();
     let store = HandoffStore::new(fixture.paths.clone());
-    let path = store.note_path_for(binding.session.0).unwrap();
+    let path = store.note_path_for(fixture.key(binding.session)).unwrap();
     fixture
         .workers
         .handoff_note_written(binding, &path)
         .await
         .unwrap();
-    assert!(store.read_session(binding.session.0).unwrap().is_empty());
+    assert!(
+        store
+            .read_session(fixture.key(binding.session))
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         recording.messages().is_empty(),
         "handoff notification waits for UI priming"
@@ -251,7 +260,7 @@ async fn memo_receipt_checks_file_and_primes_real_delivery_without_reading_body(
         .handoff_note_written(binding, &path)
         .await
         .unwrap();
-    let records = store.read_session(binding.session.0).unwrap();
+    let records = store.read_session(fixture.key(binding.session)).unwrap();
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].kind, crate::orchestration::handoff::KIND_NOTE);
     assert_eq!(records[0].note, path.to_string_lossy());
@@ -380,7 +389,7 @@ async fn handoff_marker_keeps_later_effects_and_real_wrapper_connection_alive() 
     let id = LiveSessionId(ack["session_id"].as_i64().unwrap());
     let binding = fixture.core.details(id).unwrap().binding;
     let store = HandoffStore::new(fixture.paths.clone());
-    let path = store.note_path_for(id.0).unwrap();
+    let path = store.note_path_for(fixture.key(id)).unwrap();
     for exists in [false, true] {
         if exists {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -406,7 +415,10 @@ async fn handoff_marker_keeps_later_effects_and_real_wrapper_connection_alive() 
             output["data"],
             base64::engine::general_purpose::STANDARD.encode(marker)
         );
-        assert_eq!(store.read_session(id.0).unwrap().len(), usize::from(exists));
+        assert_eq!(
+            store.read_session(fixture.key(id)).unwrap().len(),
+            usize::from(exists)
+        );
         let next = b"synthetic output after handoff\n";
         send(
             &mut wrapper,
@@ -613,7 +625,7 @@ async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
     let fixture = Fixture::new(49683);
     let binding = fixture.register().await;
     let store = HandoffStore::new(fixture.paths.clone());
-    let id = binding.session.0;
+    let id = fixture.key(binding.session);
     let done = |text: &str| Record {
         kind: KIND_DONE.into(),
         text: text.into(),
@@ -623,7 +635,7 @@ async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
     // then this launch, its work, a Hub restart that reattaches it, more work.
     store
         .append(
-            id,
+            &id,
             Record {
                 kind: KIND_SESSION_START.into(),
                 cwd: "/older-launch".into(),
@@ -633,7 +645,7 @@ async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
         )
         .unwrap();
     store
-        .append(id, done("OLDER-LAUNCH-DONE"), Timestamp::now())
+        .append(&id, done("OLDER-LAUNCH-DONE"), Timestamp::now())
         .unwrap();
     fixture
         .workers
@@ -644,7 +656,7 @@ async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
         .await
         .unwrap();
     store
-        .append(id, done("BEFORE-RESTART-DONE"), Timestamp::now())
+        .append(&id, done("BEFORE-RESTART-DONE"), Timestamp::now())
         .unwrap();
     fixture
         .workers
@@ -655,9 +667,9 @@ async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
         .await
         .unwrap();
     store
-        .append(id, done("AFTER-RESTART-DONE"), Timestamp::now())
+        .append(&id, done("AFTER-RESTART-DONE"), Timestamp::now())
         .unwrap();
-    let records = store.read_session(id).unwrap();
+    let records = store.read_session(&id).unwrap();
     let kinds: Vec<_> = records.iter().map(|r| r.kind.as_str()).collect();
     assert_eq!(
         kinds,
@@ -671,11 +683,64 @@ async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
         ]
     );
     assert_eq!(records[4].provider, "claude");
-    let markdown = render_markdown(id, &records);
+    let markdown = render_markdown(id.number(), &records);
     assert!(markdown.contains("BEFORE-RESTART-DONE"), "{markdown}");
     assert!(markdown.contains("AFTER-RESTART-DONE"), "{markdown}");
     assert!(!markdown.contains("OLDER-LAUNCH-DONE"), "{markdown}");
     assert!(!markdown.contains("/older-launch"), "{markdown}");
-    assert_eq!(store.read_current_session(id).unwrap().len(), 4);
+    assert_eq!(store.read_current_session(&id).unwrap().len(), 4);
+    assert!(fixture.warnings.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_number_given_out_again_after_a_restart_starts_its_own_records() {
+    // #44: before dated names, a Hub restart handed #1 to a new launch and
+    // its records went on at the end of the old launch's `s1.jsonl`.
+    use crate::orchestration::handoff::{KIND_DONE, KIND_SESSION_START, RecordKey};
+    let fixture = Fixture::new(49684);
+    let store = HandoffStore::new(fixture.paths.clone());
+    let old = RecordKey::legacy(1);
+    for record in [
+        Record {
+            kind: KIND_SESSION_START.into(),
+            provider: "codex".into(),
+            cwd: "/older-launch".into(),
+            ..Default::default()
+        },
+        Record {
+            kind: KIND_DONE.into(),
+            text: "OLDER-LAUNCH-DONE".into(),
+            ..Default::default()
+        },
+    ] {
+        store.append(&old, record, Timestamp::now()).unwrap();
+    }
+    let before = std::fs::read(store.path_for(&old).unwrap()).unwrap();
+    let binding = fixture.register().await;
+    assert_eq!(binding.session.0, 1);
+    let key = fixture.key(binding.session);
+    assert!(key.day().is_some(), "{key}");
+    fixture
+        .workers
+        .event(CoreEvent::Registered {
+            binding,
+            resumed: false,
+        })
+        .await
+        .unwrap();
+    let records = store.read_session(&key).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].kind, KIND_SESSION_START);
+    assert_eq!(records[0].provider, "claude");
+    assert_eq!(records[0].session_id, 1);
+    let (_, markdown) = store.write_rendered(&key).unwrap();
+    assert!(!markdown.contains("OLDER-LAUNCH-DONE"), "{markdown}");
+    assert!(!markdown.contains("/older-launch"), "{markdown}");
+    assert!(markdown.contains("- provider: claude"), "{markdown}");
+    // The older launch's file is left exactly as it was.
+    assert_eq!(
+        std::fs::read(store.path_for(&old).unwrap()).unwrap(),
+        before
+    );
     assert!(fixture.warnings.lock().unwrap().is_empty());
 }
