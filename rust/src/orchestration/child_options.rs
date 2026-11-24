@@ -353,6 +353,25 @@ fn drop_registered_mode_when_children_are_attended(
         body.permission_mode.clear();
     }
 }
+/// A registered CLI has no tier table, so `resolve_permission` never marks its
+/// launch as risk-confirmed. Its approval mode is the one a person chose or saw
+/// (the confirmation dialog shows the requested mode and can clear it with
+/// `default`). That choice is the confirmation; without it a human who picked
+/// bypassPermissions always hit "risk confirmation required" (a 500). An
+/// autonomous request is never confirmed this way, and `child_full_bypass:
+/// false` keeps refusing high-risk modes for children. The launch
+/// ([`prepare_with`]) and the dialog ([`preview_tiers`]) both ask this one
+/// function, so the dialog never discloses a different confirmation.
+fn registered_mode_is_human_confirmed(
+    request: &ChildSpawnRequest,
+    is_human: bool,
+    cfg: &OrchestrationConfig,
+) -> bool {
+    is_registered_child_provider(&request.provider)
+        && is_human
+        && cfg.child_full_bypass_enabled()
+        && !matches!(request.permission_mode.trim(), "" | "default")
+}
 
 /// Only server-resolved provenance can reach the actual launch preparation.
 /// Configuration adds bounded tools through the internal grant field; request
@@ -390,18 +409,11 @@ pub fn prepare_with(
     );
     fill_request(body.request_mut(), &permission);
     drop_registered_mode_when_children_are_attended(body.request_mut(), &cfg.orchestration);
-    // A registered CLI has no tier table, so `resolve_permission` never marks
-    // its launch as risk-confirmed. Its approval mode is the one a person chose
-    // or saw (the confirmation dialog shows the requested mode and can clear it
-    // with `default`). That choice is the confirmation; without it a human who
-    // picked bypassPermissions always hit "risk confirmation required" (a 500).
-    // An autonomous request is never confirmed this way, and
-    // `child_full_bypass: false` keeps refusing high-risk modes for children.
-    if is_registered_child_provider(&provider)
-        && body.origin().is_human()
-        && cfg.orchestration.child_full_bypass_enabled()
-        && !matches!(body.request().permission_mode.trim(), "" | "default")
-    {
+    if registered_mode_is_human_confirmed(
+        body.request(),
+        body.origin().is_human(),
+        &cfg.orchestration,
+    ) {
         body.request_mut().risk_confirmed = true;
     }
     body.fill_allowed_tools_from_config(permission.allowed_tools);
@@ -422,6 +434,7 @@ pub fn preview_tiers(
     preview_for(
         body.request(),
         launch_origin(body.origin()),
+        body.origin().is_human(),
         body.grants().allowed_tools(),
         cfg,
         providers,
@@ -433,14 +446,18 @@ pub fn preview_ui_tiers(cfg: &Config) -> BTreeMap<String, BTreeMap<String, Child
     preview_for(
         &ChildSpawnRequest::default(),
         config::LAUNCH_ORIGIN_UI,
+        true,
         &[],
         cfg,
         &RegisteredProviders::default(),
     )
 }
+/// `is_human` is the verified origin's [`VerifiedSpawnOrigin::is_human`]; the
+/// `origin` string alone cannot tell a confirmed launch from an autonomous one.
 fn preview_for(
     body: &ChildSpawnRequest,
     origin: &str,
+    is_human: bool,
     allowed_tools: &[String],
     cfg: &Config,
     registered: &RegisteredProviders,
@@ -471,6 +488,9 @@ fn preview_for(
             );
             fill_request(&mut request, &permission);
             drop_registered_mode_when_children_are_attended(&mut request, &cfg.orchestration);
+            if registered_mode_is_human_confirmed(&request, is_human, &cfg.orchestration) {
+                request.risk_confirmed = true;
+            }
             permission.permission_mode = request.permission_mode;
             permission.sandbox = request.sandbox;
             permission.ask_for_approval = request.ask_for_approval;
@@ -961,6 +981,7 @@ mod tests {
                 ..Default::default()
             },
             config::LAUNCH_ORIGIN_UI,
+            true,
             &[],
             &cfg,
             &providers,
@@ -1058,6 +1079,62 @@ mod tests {
         )
         .unwrap();
         assert_eq!(prepared.request().permission_mode, "acceptEdits");
+    }
+
+    /// The dialog showed `risk_confirmed: false` for a registered mode a person
+    /// had confirmed, while the launch treated the same request as confirmed.
+    /// Both now read one condition; an autonomous request is never shown as
+    /// confirmed.
+    #[test]
+    fn the_dialog_discloses_the_risk_confirmation_the_launch_uses() {
+        let providers = registered();
+        for full_bypass in [None, Some(false)] {
+            let cfg = Config {
+                orchestration: OrchestrationConfig {
+                    child_full_bypass: full_bypass,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            for (origin, confirmed) in [("ui", false), ("", true), ("", false)] {
+                for mode in ["", "default", "acceptEdits", "bypassPermissions"] {
+                    for preset in ["", "attended", "bounded", "full"] {
+                        let input = serde_json::json!({
+                            "provider": "fixture-plain",
+                            "permission_mode": mode,
+                            "preset": preset,
+                            "origin": origin,
+                            "confirmed": confirmed,
+                        });
+                        let body = request(&input);
+                        let is_human = body.origin().is_human();
+                        let disclosed = preview_tiers(&body, &cfg, &providers)["fixture-plain"]
+                            [preset]
+                            .risk_confirmed;
+                        let launched = prepare_with(body, &cfg, &providers)
+                            .unwrap()
+                            .request()
+                            .risk_confirmed;
+                        let case =
+                            format!("{full_bypass:?} {origin:?} {confirmed} {mode:?} {preset:?}");
+                        assert_eq!(disclosed, launched, "{case}");
+                        if !is_human {
+                            assert!(!disclosed, "{case}");
+                        }
+                    }
+                }
+            }
+        }
+        // The case the dialog used to get wrong: a person's bypassPermissions.
+        let body = request(&serde_json::json!({
+            "provider": "fixture-plain",
+            "permission_mode": "bypassPermissions",
+            "confirmed": true,
+        }));
+        assert!(
+            preview_tiers(&body, &Config::default(), &providers)["fixture-plain"][""]
+                .risk_confirmed
+        );
     }
 
     #[test]
