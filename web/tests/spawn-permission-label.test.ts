@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { cacheProviderDeclarations, clearProviderDeclarations } from '../src/app/provider-declarations';
+import {
+  cacheProviderDeclarations,
+  clearProviderDeclarations,
+  permissionLabelKeys,
+  permissionLabelText,
+} from '../src/app/provider-declarations';
 import { BUILTIN_DECLARATIONS_SEED } from '../src/app/provider-declarations-seed';
-import { permissionLabelKeys, permissionLabelText } from '../src/app/spawn-permission-label';
 
 const ja = JSON.parse(readFileSync(new URL('../src/i18n/ja.json', import.meta.url), 'utf8')) as Record<string, string>;
 const translate = (key: string): string => ja[key] ?? key;

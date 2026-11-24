@@ -10,10 +10,9 @@ import { activateSession, providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { browserUseHint, loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
-import { providerIsAcp, providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
+import { permissionLabelText, providerIsAcp, providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
-import { permissionLabelText } from './spawn-permission-label.js';
 import { orchestrationCliOptions, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
@@ -1196,7 +1195,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   }
 
   // 「auto」「bypassPermissions」の文言。同梱の CLI は専用の訳があればそれ、無ければ共通の文言。
-  // 登録型は id が同梱の CLI に似ていても共通の文言（spawn-permission-label.ts）。
+  // 登録型は id が同梱の CLI に似ていても共通の文言（provider-declarations.ts の permissionLabelKeys）。
   function permissionLabel(kind: 'auto' | 'bypass', p: string): string {
     return permissionLabelText(kind, p, (key) => t(key));
   }
