@@ -39,9 +39,13 @@ export function updateApprovalTabBadge() {
 
 // プロバイダ色ドット HTML。provider は wrapper の register がそのまま届く値なので、ほかの画面と同じ
 // safeClassToken（英小文字・数字・- ・_ だけ）を通してから class 属性へ入れる（innerHTML に入るため）。
+// 履歴の行のように className へ直接入れる所も、空白で別のクラスが混ざらないよう同じものを使う。
+function providerDotClass(provider) {
+  return `aqt-provider-dot prov-shape ${safeClassToken(provider)}`;
+}
+
 function providerDotHtml(provider) {
-  const p = safeClassToken(provider);
-  return `<span class="aqt-provider-dot prov-shape ${p}" aria-hidden="true"></span>`;
+  return `<span class="${providerDotClass(provider)}" aria-hidden="true"></span>`;
 }
 
 // セッションのタイトル文字列
@@ -306,7 +310,7 @@ function appendApprovalHistorySection(pane: HTMLElement): void {
     li.appendChild(time);
 
     const dot = document.createElement('span');
-    dot.className = `aqt-provider-dot prov-shape ${String(row?.provider || '').toLowerCase()}`;
+    dot.className = providerDotClass(row?.provider);
     dot.setAttribute('aria-hidden', 'true');
     li.appendChild(dot);
 

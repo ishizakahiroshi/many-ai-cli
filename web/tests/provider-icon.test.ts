@@ -545,14 +545,18 @@ describe('icon image in the settings preview', () => {
 const readSource = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const transpile = (code: string) => new Bun.Transpiler({ loader: 'ts' }).transformSync(code);
 
-function providerDotHtml(): (provider: unknown) => string {
+function approvalDotFunctions(): { html: (provider: unknown) => string; cls: (provider: unknown) => string } {
   const source = readSource('../src/app/approval-queue-tab.ts');
-  const start = source.indexOf('function providerDotHtml');
+  const start = source.indexOf('function providerDotClass');
   const end = source.indexOf('// セッションのタイトル文字列', start);
-  if (start < 0 || end < 0) throw new Error('cannot slice providerDotHtml');
+  if (start < 0 || end < 0) throw new Error('cannot slice providerDotClass / providerDotHtml');
   const ctx: any = { safeClassToken, String };
-  runInNewContext(`${transpile(source.slice(start, end))}\nglobalThis.fn = providerDotHtml;`, ctx);
-  return ctx.fn;
+  runInNewContext(`${transpile(source.slice(start, end))}\nglobalThis.html = providerDotHtml;\nglobalThis.cls = providerDotClass;`, ctx);
+  return { html: ctx.html, cls: ctx.cls };
+}
+
+function providerDotHtml(): (provider: unknown) => string {
+  return approvalDotFunctions().html;
 }
 
 describe('承認タブのカードの provider の色ドット', () => {
@@ -571,5 +575,19 @@ describe('承認タブのカードの provider の色ドット', () => {
     expect(html.match(/"/g)).toHaveLength(4); // class と aria-hidden の 2 組だけ
     const cls = /class="([^"]*)"/.exec(html)![1];
     expect(cls.split(' ').pop()).toMatch(/^[a-z0-9_-]+$/);
+  });
+
+  test('履歴の行のドットも同じクラス 1 つに絞り、空白で別のクラスを混ぜない', () => {
+    const { cls } = approvalDotFunctions();
+    expect(cls('Claude')).toBe('aqt-provider-dot prov-shape claude');
+    expect(cls('evil is-active-session hidden')).toBe('aqt-provider-dot prov-shape evil-is-active-session-hidden');
+    expect(cls(undefined)).toBe('aqt-provider-dot prov-shape unknown');
+  });
+
+  test('承認タブで provider を class に入れる所は、すべて providerDotClass を通す', () => {
+    const source = readSource('../src/app/approval-queue-tab.ts');
+    const raw = source.split('\n').filter((line) => /className\s*=/.test(line) && /provider/.test(line) && !/providerDotClass\(/.test(line));
+    expect(raw).toEqual([]);
+    expect(source).toContain('dot.className = providerDotClass(row?.provider);');
   });
 });
