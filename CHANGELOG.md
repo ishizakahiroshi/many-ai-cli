@@ -38,7 +38,9 @@ Release artifacts are published at
   headers): one sent with the Hub token alone (as a conductor's shell has) is
   refused. That proof is not a strict barrier, since a local program holding
   the Hub token can obtain it too, so what limits the spend is that a profile
-  exists only if you wrote it, and the limit you wrote in it. Conflicting
+  exists only if you wrote it, and the limit you wrote in it. That limit caps
+  each run, not the total: a program holding the Hub token can start as many
+  runs as it likes, each up to the limit. Conflicting
   credentials, managed policy, another settings root or a Claude Code version
   not yet reviewed (2.1.295 and 2.1.330 are) stop the run before it starts,
   with the reason on its card, and it is never restarted automatically. Relay
@@ -54,8 +56,10 @@ Release artifacts are published at
   plan login, log in to your plan, or create a profile and approve API key
   billing per run. A run stops before it starts, with the reason on its card,
   only when its arguments already pass another `--settings` or its session
-  settings cannot be written. A run with `ANTHROPIC_BASE_URL` (a local model
-  route or your own gateway) keeps its key and settings as before (#14).
+  settings cannot be written. A run with a non-empty `ANTHROPIC_BASE_URL` in
+  the environment or in `env` of your user, project or local Claude settings
+  (a local model route or your own gateway) keeps its key and settings as
+  before (#14).
 - **Sidebar display density** can be switched between Standard and Compact in
   Settings. Compact uses one-line cards, thinner project headings and a
   details popover after a short hover. The selected-session header also shows

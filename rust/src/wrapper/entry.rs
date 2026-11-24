@@ -1330,6 +1330,24 @@ mod tests {
                 .settings
                 .is_none_or(|settings| settings.get("apiKeyHelper").is_none())
         );
+        // The same gateway written in the person's Claude settings instead of
+        // the environment: the key and the settings stay as before as well.
+        std::fs::write(
+            home.join(".claude").join("settings.json"),
+            r#"{"apiKeyHelper":"synthetic-do-not-execute","env":{"ANTHROPIC_BASE_URL":"https://gateway.invalid"}}"#,
+        )
+        .unwrap();
+        let gateway = run("claude", vec![format!("ANTHROPIC_API_KEY={KEY}")], vec![]);
+        gateway.result.unwrap();
+        assert_eq!(
+            inherited(&gateway.env, "ANTHROPIC_API_KEY"),
+            Some(Some(KEY.into()))
+        );
+        assert!(
+            gateway
+                .settings
+                .is_none_or(|settings| settings.get("apiKeyHelper").is_none())
+        );
         // A provider without API key billing is not touched.
         let other = run("codex", vec![format!("ANTHROPIC_API_KEY={KEY}")], vec![]);
         other.result.unwrap();

@@ -17,7 +17,9 @@
 //! and again in the wrapper. The approval must carry the dashboard's proof
 //! (`VerifiedConfirmationRequest::from_ui`). That proof is not a strict
 //! barrier: a local program holding the Hub token can obtain it too, so the
-//! person's own limit is what bounds a run that such a program approves.
+//! person's own limit is what bounds a run that such a program approves. The
+//! limit is per run, not a total: such a program can start as many runs as it
+//! likes, each up to the limit.
 //!
 //! Only a built-in provider whose shipped headless output is Claude Code's
 //! stream-json supports it (the helper, `--bare` and `--max-budget-usd` are

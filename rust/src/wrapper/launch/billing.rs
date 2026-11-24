@@ -13,9 +13,10 @@
 //! empty `apiKeyHelper` and `env.ANTHROPIC_API_KEY`, whether or not a key was
 //! found (a settings file that is too large, unreadable or written after the
 //! look would otherwise slip through). The person's files are not changed. A
-//! run sent to another endpoint (`ANTHROPIC_BASE_URL`, a local model route or
-//! the person's own gateway) is left exactly as before. Nothing else about a
-//! plan run changes.
+//! run sent to another endpoint (`ANTHROPIC_BASE_URL` in the environment or
+//! in the user, project or local settings: a local model route or the
+//! person's own gateway) is left exactly as before. Nothing else about a plan
+//! run changes.
 use super::LaunchPlan;
 use crate::{
     config::{
@@ -357,6 +358,15 @@ impl PlanLoginOverride {
     /// Blank values: Claude Code treats an empty `apiKeyHelper` and an empty
     /// `ANTHROPIC_API_KEY` as not set, so the run falls back to the login.
     /// Written every time, not only for a key that was found.
+    ///
+    /// Only the key names go into `env`: Claude Code applies the `env` of
+    /// each settings source one variable at a time (user, project, local,
+    /// `--settings`, policy; a later source replaces only the same name,
+    /// matched case-insensitively), so the person's other `env` entries
+    /// (proxy, model and so on) stay in effect. Read in the Claude Code
+    /// 2.1.329, 2.1.330 and 2.1.331 programs on 2026-11-24, and in line with
+    /// the official settings and environment variable pages ("a managed
+    /// settings entry overrides the same variable").
     fn insert_settings(&self, settings: &mut serde_json::Map<String, serde_json::Value>) {
         if !self.blank_settings {
             return;
@@ -416,10 +426,14 @@ pub fn plan_login_override_conflicts(override_: &PlanLoginOverride, args: &[Stri
 /// the blanks depends on what was found. Names and emptiness only; no value
 /// is read.
 ///
-/// A run sent to another endpoint (`ANTHROPIC_BASE_URL` set: a local model
-/// route, or the person's own gateway that needs the key) is not billed to
-/// the Anthropic plan through this wrapper's choice; it keeps its key and
-/// settings exactly as before.
+/// A run sent to another endpoint (a non-empty `ANTHROPIC_BASE_URL`: a local
+/// model route, or the person's own gateway that needs the key) is not billed
+/// to the Anthropic plan through this wrapper's choice; it keeps its key and
+/// settings exactly as before. That endpoint counts wherever Claude Code would
+/// take it from: the environment, or `env.ANTHROPIC_BASE_URL` in the user,
+/// project or local settings (Claude Code applies settings `env` entries one
+/// variable at a time over the environment). A settings file that cannot be
+/// read is not taken as naming one, so that run gets the blanks.
 pub fn plan_login_override(
     paths: &RuntimePaths,
     home: &Path,
@@ -444,16 +458,22 @@ pub fn plan_login_override(
         blank_settings: true,
         ..Default::default()
     };
-    let config = match env(environment, "CLAUDE_CONFIG_DIR") {
-        Some(path) if Path::new(path).is_absolute() => PathBuf::from(path),
-        // The blanks still go in; only the look for other spellings stops.
-        Some(_) => return found,
-        None => home.join(".claude"),
+    // A relative config root is not looked into (where Claude Code would
+    // resolve it is not decided here); the project settings still are.
+    let mut files: Vec<PathBuf> = match env(environment, "CLAUDE_CONFIG_DIR") {
+        Some(path) if Path::new(path).is_absolute() => {
+            let config = PathBuf::from(path);
+            ["settings.json", "settings.local.json"]
+                .iter()
+                .map(|name| config.join(name))
+                .collect()
+        }
+        Some(_) => Vec::new(),
+        None => ["settings.json", "settings.local.json"]
+            .iter()
+            .map(|name| home.join(".claude").join(name))
+            .collect(),
     };
-    let mut files: Vec<PathBuf> = ["settings.json", "settings.local.json"]
-        .iter()
-        .map(|name| config.join(name))
-        .collect();
     for ancestor in cwd.ancestors() {
         let at_root = if paths.is_trial() {
             match paths.relative_to_selected_root(ancestor) {
@@ -471,37 +491,61 @@ pub fn plan_login_override(
         }
     }
     for path in &files {
-        other_key_spellings(paths, path, &mut found);
+        if settings_key_spellings(paths, path, &mut found) == SettingsEndpoint::Other {
+            return PlanLoginOverride::default();
+        }
     }
     found
 }
 
-/// Other spellings of `env.ANTHROPIC_API_KEY` in one settings file, so they
-/// are blanked as written too. A file that cannot be read is skipped: the
-/// blanks of the usual names are written regardless.
-fn other_key_spellings(paths: &RuntimePaths, path: &Path, found: &mut PlanLoginOverride) {
+/// Whether one settings file sends the run to another endpoint.
+#[derive(PartialEq, Eq)]
+enum SettingsEndpoint {
+    Unchanged,
+    Other,
+}
+
+/// One settings file: whether its `env` names another endpoint (a non-empty
+/// `ANTHROPIC_BASE_URL` in any spelling; Claude Code matches these names
+/// case-insensitively), and other spellings of `env.ANTHROPIC_API_KEY`, so
+/// they are blanked as written too. A file that cannot be read is skipped:
+/// the blanks of the usual names are written regardless. Names and emptiness
+/// only; no value is kept.
+fn settings_key_spellings(
+    paths: &RuntimePaths,
+    path: &Path,
+    found: &mut PlanLoginOverride,
+) -> SettingsEndpoint {
     if paths.is_trial() && paths.relative_to_selected_root(path).is_err() {
-        return;
+        return SettingsEndpoint::Unchanged;
     }
     let (Some(parent), Some(name)) = (path.parent(), path.file_name().and_then(|v| v.to_str()))
     else {
-        return;
+        return SettingsEndpoint::Unchanged;
     };
     let Ok(bytes) = Dir::open(parent).and_then(|directory| directory.read(name, 128 * 1024)) else {
-        return;
+        return SettingsEndpoint::Unchanged;
     };
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        return;
+        return SettingsEndpoint::Unchanged;
     };
-    if let Some(env) = value.get("env").and_then(serde_json::Value::as_object) {
-        found.settings_environment.extend(
-            env.keys()
-                .filter(|key| {
-                    key.eq_ignore_ascii_case("ANTHROPIC_API_KEY") && *key != "ANTHROPIC_API_KEY"
-                })
-                .cloned(),
-        );
+    let Some(env) = value.get("env").and_then(serde_json::Value::as_object) else {
+        return SettingsEndpoint::Unchanged;
+    };
+    if env.iter().any(|(key, value)| {
+        key.eq_ignore_ascii_case("ANTHROPIC_BASE_URL")
+            && value.as_str().is_some_and(|value| !value.is_empty())
+    }) {
+        return SettingsEndpoint::Other;
     }
+    found.settings_environment.extend(
+        env.keys()
+            .filter(|key| {
+                key.eq_ignore_ascii_case("ANTHROPIC_API_KEY") && *key != "ANTHROPIC_API_KEY"
+            })
+            .cloned(),
+    );
+    SettingsEndpoint::Unchanged
 }
 
 #[cfg(windows)]

@@ -423,6 +423,93 @@ fn a_plan_login_run_switches_off_a_key_that_would_bill_it_instead() {
     ));
 }
 
+/// A gateway the person set in the Claude settings (`env.ANTHROPIC_BASE_URL`
+/// in the user, project or local settings) counts the same as one in the
+/// environment: the run keeps its key and its settings exactly as before.
+/// Synthetic names and values only.
+#[test]
+fn a_plan_login_run_to_a_gateway_in_the_claude_settings_keeps_its_key() {
+    let (root, _installed, paths) = trial();
+    let home = root.path().join("home");
+    let cwd = root.path().join("project");
+    let profile = root.path().join("profile");
+    for directory in [home.join(".claude"), cwd.join(".claude"), profile.clone()] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let key = vec!["ANTHROPIC_API_KEY=synthetic-not-a-key".to_owned()];
+    let with_config = vec![
+        "ANTHROPIC_API_KEY=synthetic-not-a-key".to_owned(),
+        format!("CLAUDE_CONFIG_DIR={}", profile.display()),
+    ];
+    let relative = vec![
+        "ANTHROPIC_API_KEY=synthetic-not-a-key".to_owned(),
+        "CLAUDE_CONFIG_DIR=relative".to_owned(),
+    ];
+    let user = home.join(".claude/settings.json");
+    let user_local = home.join(".claude/settings.local.json");
+    let project = cwd.join(".claude/settings.json");
+    let project_local = cwd.join(".claude/settings.local.json");
+    let profile_settings = profile.join("settings.json");
+    let gateway = r#"{"apiKeyHelper":"synthetic-do-not-execute","env":{"ANTHROPIC_BASE_URL":"https://gateway.invalid","ANTHROPIC_API_KEY":"synthetic"}}"#;
+    for (file, environment) in [
+        (&user, &key),
+        (&user_local, &key),
+        (&project, &key),
+        (&project_local, &key),
+        (&profile_settings, &with_config),
+        // A relative config root is not looked into; the project still is.
+        (&project, &relative),
+    ] {
+        std::fs::write(file, gateway).unwrap();
+        let found = plan_login_override(&paths, &home, &cwd, environment);
+        assert_eq!(found, PlanLoginOverride::default(), "{}", file.display());
+        assert!(!found.needs_settings());
+        let mut env = std::collections::BTreeMap::new();
+        found.remove_environment(&mut env);
+        assert!(env.is_empty());
+        // The person's own --settings stays allowed, as before.
+        assert!(!plan_login_override_conflicts(
+            &found,
+            &["--settings".into(), "other.json".into()]
+        ));
+        std::fs::remove_file(file).unwrap();
+    }
+    // Another spelling of the name counts too (Claude Code matches it
+    // case-insensitively).
+    std::fs::write(
+        &user,
+        r#"{"env":{"anthropic_base_url":"http://127.0.0.1:9"}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        plan_login_override(&paths, &home, &cwd, &key),
+        PlanLoginOverride::default()
+    );
+    // An empty value, a gateway only in a profile that is not the one in use,
+    // or a file that cannot be read does not name another endpoint: the key is
+    // switched off as for any plan run.
+    std::fs::write(&profile_settings, gateway).unwrap();
+    for (settings, environment) in [
+        (r#"{"env":{"ANTHROPIC_BASE_URL":""}}"#.to_owned(), &key),
+        ("{}".to_owned(), &key),
+        ("{}".to_owned(), &relative),
+        (
+            format!(
+                r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://gateway.invalid"}},"padding":"{}"}}"#,
+                "x".repeat(200 * 1024)
+            ),
+            &key,
+        ),
+    ] {
+        std::fs::write(&user, settings).unwrap();
+        let found = plan_login_override(&paths, &home, &cwd, environment);
+        assert!(found.needs_settings());
+        let mut env = std::collections::BTreeMap::new();
+        found.remove_environment(&mut env);
+        assert_eq!(env.len(), 1);
+    }
+}
+
 /// The plan run's blanks go into the one session-owned settings file, with
 /// the bounded settings when that tier also needs them.
 #[test]
