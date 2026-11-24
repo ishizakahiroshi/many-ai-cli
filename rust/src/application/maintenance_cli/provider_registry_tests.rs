@@ -438,6 +438,7 @@ async fn a_hub_with_another_data_folder_refuses_the_phrase_file_and_the_cli_says
 fn test_removes_every_inherited_hub_session_variable() {
     let environment = vec![
         "MANY_AI_CLI_HUB_TOKEN=synthetic".to_owned(),
+        "aNy_Ai_Cli_HuB_tOkEn=synthetic".to_owned(),
         "MANY_AI_CLI_LOCAL_PROOF=synthetic".to_owned(),
         "Many_Ai_Cli_Future=synthetic".to_owned(),
         "PATH=synthetic".to_owned(),
@@ -458,6 +459,8 @@ fn test_removes_every_inherited_hub_session_variable() {
         .collect();
     for needle in [
         "MANY_AI_CLI_HUB_TOKEN",
+        "aNy_Ai_Cli_HuB_tOkEn",
+        "ANY_AI_CLI_LOCAL_PROOF",
         "MANY_AI_CLI_HUB_PORT",
         "MANY_AI_CLI_SESSION_ID",
         "MANY_AI_CLI_LOCAL_PROOF",

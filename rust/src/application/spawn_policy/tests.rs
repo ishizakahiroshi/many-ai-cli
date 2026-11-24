@@ -832,14 +832,11 @@ fn relative_vendor_seed_reads_hub_cwd_and_retains_environment_text() {
     );
     let hub = visible_native_path(f.paths.root()).join("hub-cwd");
     let child = visible_native_path(f.paths.root()).join("child-cwd");
-    for (root, value) in [
-        (&hub, "synthetic-hub-policy"),
-        (&child, "synthetic-child-policy"),
-    ] {
+    for (root, value) in [(&hub, "dark"), (&child, "light")] {
         std::fs::create_dir_all(root.join("relative-vendor")).unwrap();
         std::fs::write(
             root.join("relative-vendor/settings.json"),
-            format!("{{\"policy\":\"{value}\"}}"),
+            format!("{{\"theme\":\"{value}\"}}"),
         )
         .unwrap();
     }
@@ -861,11 +858,11 @@ fn relative_vendor_seed_reads_hub_cwd_and_retains_environment_text() {
     assert!(
         std::fs::read_to_string(destination)
             .unwrap()
-            .contains("synthetic-hub-policy")
+            .contains("dark")
     );
     assert!(
         std::fs::read_to_string(child.join("relative-vendor/settings.json"))
             .unwrap()
-            .contains("synthetic-child-policy")
+            .contains("light")
     );
 }

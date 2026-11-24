@@ -243,14 +243,7 @@ where
     for key in proof_keys {
         options.process.env.insert(key, None);
     }
-    options.process.env.insert(
-        "MANY_AI_CLI_SESSION_ID".into(),
-        Some(registered.session_id.to_string().into()),
-    );
-    options.process.env.insert(
-        "MANY_AI_CLI_HUB_TOKEN".into(),
-        Some(options.registration.token.clone().into()),
-    );
+    super::launch::set_session_environment(&mut options.process, &registered);
     let size = PtySize::from_wire(registered.cols, registered.rows).unwrap_or_default();
     if let Some(owner) = &options.execution_owner {
         owner
@@ -432,6 +425,9 @@ where
                     frame.started_at = registered.started_at.clone();
                     frame.log_path = registered.log_path.clone();
                     frame.jsonl_path = registered.jsonl_path.clone();
+                    frame.data = serde_json::to_vec(&serde_json::json!({
+                        "child_credential": registered.token,
+                    }))?;
                     frame.replay_b64 = STANDARD.encode(bytes);
                     frame.pty_bytes = total;
                     frame.input_seq_high_watermark = watermark;

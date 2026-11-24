@@ -5,6 +5,103 @@ use crate::{
     process::Cancellation,
 };
 
+#[tokio::test]
+async fn child_credential_is_local_and_bound_to_its_live_session_operations() {
+    use crate::hub::http::Request;
+    let mut f = fixture_at_port(true, 49327);
+    f.config.token = "synthetic-hub-key".into();
+    f.config.remote_pin_hash = "synthetic-configured-pin".into();
+    f.config.hub.allow_loopback_without_token = true;
+    let binding = f.core.details(register(&f).await).unwrap().binding;
+    let router = ServiceRouter::new(
+        Arc::new(ConfigStore::new(f.paths.clone(), f.config.clone()).unwrap()),
+        f.paths.clone(),
+        f.core.clone(),
+        49327,
+    )
+    .unwrap();
+    let child = router.child_tokens.issue(&f.config.token, binding).unwrap();
+    let request = |method: &str, path: &str| Request {
+        method: method.into(),
+        path: path.into(),
+        host: "127.0.0.1:49327".into(),
+        remote_addr: "127.0.0.1:49328".into(),
+        headers: vec![("Authorization".into(), format!("Bearer {child}"))],
+        ..Default::default()
+    };
+    let parent = format!("/api/sessions/{}", binding.session.0);
+    let usage = request("POST", crate::hub::usage_routes::PATH);
+    assert!(router.preflight(&usage, 1).is_ok());
+    let mut lower_scheme = request("GET", "/api/session-history");
+    lower_scheme.headers[0].1 = format!("bearer {child}");
+    assert_eq!(router.preflight(&lower_scheme, 1).unwrap_err().status, 401);
+    lower_scheme
+        .headers
+        .insert(0, ("Authorization".into(), "Bearer other".into()));
+    assert_eq!(router.preflight(&lower_scheme, 1).unwrap_err().status, 401);
+    lower_scheme.headers.clear();
+    lower_scheme.query = format!("token=&token={child}");
+    assert_eq!(router.preflight(&lower_scheme, 1).unwrap_err().status, 401);
+    for (method, action) in [
+        ("POST", "spawn-child"),
+        ("POST", "send-child"),
+        ("POST", "close-child"),
+        ("GET", "relay"),
+        ("POST", "relay"),
+        ("POST", "relay-stop"),
+    ] {
+        assert!(
+            router
+                .preflight(&request(method, &format!("{parent}/{action}")), 1)
+                .is_ok()
+        );
+    }
+    for (method, path) in [
+        ("GET", "/api/session-history".to_owned()),
+        ("POST", "/api/auth/launch-code".to_owned()),
+        ("POST", format!("{parent}/spawn-confirm")),
+        ("POST", format!("{parent}/inject")),
+        ("POST", format!("{parent}/relay-resume")),
+        (
+            "POST",
+            format!("/api/sessions/{}/send-child", binding.session.0 + 1),
+        ),
+    ] {
+        assert_eq!(
+            router
+                .preflight(&request(method, &path), 1)
+                .unwrap_err()
+                .status,
+            401
+        );
+    }
+    let mut remote = usage.clone();
+    remote
+        .headers
+        .push(("X-Forwarded-For".into(), "192.0.2.9".into()));
+    assert_eq!(router.preflight(&remote, 1).unwrap_err().status, 401);
+    let mut wrong_origin = usage.clone();
+    wrong_origin
+        .headers
+        .push(("Origin".into(), "https://example.invalid".into()));
+    assert_eq!(router.preflight(&wrong_origin, 1).unwrap_err().status, 403);
+    let mut query = usage.clone();
+    query.headers.clear();
+    query.query = format!("token={child}");
+    assert_eq!(router.preflight(&query, 1).unwrap_err().status, 401);
+    let mut bad = usage.clone();
+    bad.headers[0].1.push('x');
+    assert_eq!(router.preflight(&bad, 1).unwrap_err().status, 401);
+    assert_eq!(
+        router
+            .preflight(&request("GET", crate::hub::usage_routes::PATH), 1)
+            .unwrap_err()
+            .status,
+        405
+    );
+    router.child_tokens.disconnect(binding);
+    assert_eq!(router.preflight(&usage, 1).unwrap_err().status, 401);
+}
 struct CancelOnDrop(Cancellation);
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {

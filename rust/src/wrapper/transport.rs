@@ -228,6 +228,15 @@ pub async fn register(
                 "unexpected wrapper registration response",
             ));
         }
+        if response.token == registration.token
+            || crate::hub::child_token::session(&response.token)
+                != Some(crate::proto::core::LiveSessionId(response.session_id))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Hub did not issue a session credential; update and restart the Hub",
+            ));
+        }
         Ok((socket, response))
     };
     tokio::select! {

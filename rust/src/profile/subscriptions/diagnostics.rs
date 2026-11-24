@@ -3,6 +3,7 @@ pub use super::seed::{DiagnosticEntry, diagnostic_entries, sync_drift};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::profile::seed::SettingsFormat;
     use std::collections::BTreeSet;
     #[test]
     fn toml_and_json_drift_compare_meaning_and_never_return_values_or_write() {
@@ -11,16 +12,17 @@ mod tests {
         let destination = t.path().join("profile.toml");
         std::fs::write(
             &source,
-            "policy = 'secret-value' # comment\ninteger = 1\nowned = 'left'\nadded = true\n",
+            "model = 'gpt-5.1-codex' # comment\nmodel_reasoning_effort = 'high'\nunknown = 'secret-value'\nhide_agent_reasoning = true\n",
         )
         .unwrap();
         std::fs::write(
             &destination,
-            "policy=\"secret-value\"\ninteger = 1.0\nowned = 'right'\n",
+            "model = 'gpt-5.1-codex'\nmodel_reasoning_effort = 'low'\n",
         )
         .unwrap();
         let original = std::fs::read(&destination).unwrap();
         let entry = DiagnosticEntry {
+            format: Some(SettingsFormat::Codex),
             trial_root: None,
             source: source.clone(),
             dest: "config.toml",
@@ -29,25 +31,25 @@ mod tests {
             sync_owned: Some(BTreeSet::from(["owned".into()])),
         };
         let (added, changed) = sync_drift(&entry, &destination).unwrap();
-        assert_eq!(added, vec!["added"]);
-        assert_eq!(changed, vec!["integer"]);
+        assert_eq!(added, vec!["hide_agent_reasoning"]);
+        assert_eq!(changed, vec!["model_reasoning_effort"]);
         assert!(!format!("{added:?}{changed:?}").contains("secret-value"));
         assert_eq!(std::fs::read(&destination).unwrap(), original);
         std::fs::write(
             &source,
-            r#"{"policy":{"count":1,"secret":"never-return"},"owned":"left"}"#,
+            r#"{"theme":"dark","env":{"arbitrary":"never-return"},"voiceEnabled":{"secret":"never-return"}}"#,
         )
         .unwrap();
-        std::fs::write(
-            &destination,
-            r#"{"owned":"right","policy":{"secret":"never-return","count":1.0}}"#,
-        )
-        .unwrap();
+        std::fs::write(&destination, r#"{"theme":"light"}"#).unwrap();
         let entry = DiagnosticEntry {
+            format: Some(SettingsFormat::Claude),
             dest: "settings.json",
             ..entry
         };
-        assert_eq!(sync_drift(&entry, &destination).unwrap(), (vec![], vec![]));
+        assert_eq!(
+            sync_drift(&entry, &destination).unwrap(),
+            (vec![], vec!["theme".into()])
+        );
         std::fs::write(&destination, b"not JSON").unwrap();
         assert!(sync_drift(&entry, &destination).is_err());
     }
@@ -63,6 +65,7 @@ mod tests {
         .unwrap();
         std::fs::write(root.join("safe.json"), br#"{"setting":true}"#).unwrap();
         let entry = DiagnosticEntry {
+            format: None,
             trial_root: Some(root.clone()),
             source: root.join("safe.json"),
             dest: "safe.json",

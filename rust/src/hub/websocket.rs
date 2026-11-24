@@ -134,6 +134,11 @@ impl WebSocketService {
         &self,
         request: &Request,
     ) -> Result<tokio::sync::OwnedSemaphorePermit, Response> {
+        if auth::presents_child_token(request) {
+            return Err(
+                Response::error(401, "unauthorized", "session credential refused").no_store(),
+            );
+        }
         let snapshot = self
             .services
             .config
@@ -232,7 +237,7 @@ impl WebSocketService {
         preauth: tokio::sync::OwnedSemaphorePermit,
     ) -> Result<(), SessionError> {
         let (writer, mut reader) = socket.split();
-        let first = receive_first(&mut reader, &self.shutdown)
+        let mut first = receive_first(&mut reader, &self.shutdown)
             .await?
             .ok_or(SessionError::Cancelled)?;
         // Capture before token checking; revoke between authentication and core
@@ -334,6 +339,23 @@ impl WebSocketService {
             let closed = self.sockets.reserve_wrapper(connection, writer)?;
             let requested = first.session_id;
             let reattach = first.r#type == "reattach";
+            let has_master = auth::valid_token(&first.token, &config.config.token)
+                || auth::valid_token(&auth::request_token(&request), &config.config.token);
+            // This private envelope is for the authenticated wrapper transport
+            // only. Do not pass the credential to the session or its observers.
+            let previous_token = if reattach && !first.data.is_empty() {
+                #[derive(serde::Deserialize)]
+                struct ReattachCredential {
+                    child_credential: String,
+                }
+                let data = std::mem::take(&mut first.data);
+                (data.len() <= 512)
+                    .then(|| serde_json::from_slice::<ReattachCredential>(&data).ok())
+                    .flatten()
+                    .map(|value| value.child_credential)
+            } else {
+                None
+            };
             // The provider name comes from the wrapper: only the shape the
             // registration check allows reaches the session, its log file
             // names, history or the screen.
@@ -380,7 +402,7 @@ impl WebSocketService {
                     )
                 })
             };
-            let (binding, ack, effects, receipt, metadata) = match registration {
+            let (binding, mut ack, effects, receipt, metadata) = match registration {
                 Ok(registration) => registration,
                 Err(error) => {
                     if reattach && let Some(rejection) = reattach_rejection(requested, &error) {
@@ -456,6 +478,22 @@ impl WebSocketService {
                 return Err(error);
             }
             let result = async {
+                if has_master {
+                    let tokens = &self.services.child_tokens;
+                    let token_error =
+                        |_| SessionError::Transport("child credential unavailable".into());
+                    if !reattach {
+                        ack.token = tokens
+                            .issue(&config.config.token, binding)
+                            .map_err(token_error)?;
+                    } else if let Some(token) = previous_token
+                        && tokens
+                            .restore(&token, &config.config.token, binding)
+                            .map_err(token_error)?
+                    {
+                        ack.token = token;
+                    }
+                }
                 let sent = self.sockets.acknowledge_wrapper(binding, ack).await;
                 if let Some(guard) = startup.take() {
                     // Transfer is already disarmed before the first ACK byte.
@@ -495,6 +533,7 @@ impl WebSocketService {
                 result
             }
             .await;
+            self.services.child_tokens.disconnect(binding);
             self.sockets.close_wrapper(binding).await?;
             match self.core.disconnected(binding, Timestamp::now()) {
                 Ok(effects) => {
@@ -853,6 +892,9 @@ fn authorize_first(
     first: &proto::Message,
     now: Timestamp,
 ) -> bool {
+    if super::child_token::is_child(&first.token) || auth::presents_child_token(request) {
+        return false;
+    }
     (auth::valid_token(&first.token, &config.token) || auth::token_or_trusted(request, config))
         && pin_satisfied(request, auth_service, config, now)
 }
@@ -1114,6 +1156,37 @@ mod tests {
             ..config.clone()
         };
         assert!(!authorized_upgrade(&request, &auth, &pinned, UNIX_EPOCH));
+    }
+    #[test]
+    fn child_credential_is_never_a_websocket_login_even_on_trusted_loopback() {
+        let config = Config {
+            token: "synthetic-hub-token".into(),
+            hub: crate::config::HubConfig {
+                allow_loopback_without_token: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let auth = AuthService::default();
+        let mut request = request();
+        let child = "child-v1.synthetic";
+        let first = proto::Message {
+            token: child.into(),
+            ..Default::default()
+        };
+        assert!(!authorize_first(
+            &request, &auth, &config, &first, UNIX_EPOCH
+        ));
+        request
+            .headers
+            .push(("Authorization".into(), format!("Bearer {child}")));
+        assert!(!authorize_first(
+            &request,
+            &auth,
+            &config,
+            &Default::default(),
+            UNIX_EPOCH
+        ));
     }
     #[test]
     fn first_message_token_or_http_header_fallback() {

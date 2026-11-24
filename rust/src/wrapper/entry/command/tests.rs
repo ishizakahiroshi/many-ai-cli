@@ -256,6 +256,7 @@ mod native {
                     serde_json::to_string(&Message {
                         r#type: "registered".into(),
                         session_id: 17,
+                        token: format!("child-v1.17.{}.{}", "a".repeat(64), "b".repeat(64)),
                         ..Default::default()
                     })
                     .unwrap()
@@ -302,6 +303,8 @@ mod native {
             format!("TMPDIR={}", fixture.paths.root().display()),
             format!("TEMP={}", fixture.paths.root().display()),
             format!("TMP={}", fixture.paths.root().display()),
+            "ANY_AI_CLI_HUB_TOKEN=synthetic-previous".into(),
+            "MANY_AI_CLI_LOCAL_PROOF=synthetic-previous".into(),
         ]);
         let args = if headless {
             vec!["--headless".into()]
@@ -407,7 +410,17 @@ mod native {
             let listener = listener().await;
             let fixture = Fixture::new(listener.local_addr().unwrap().port());
             let marker = fixture.paths.root().join("did-run");
-            let owned = script(&fixture, fixture.paths.root(), "synthetic", &marker);
+            let expected = format!("child-v1.17.{}.{}", "a".repeat(64), "b".repeat(64));
+            let owned = fixture.file(
+                fixture.paths.root(),
+                "synthetic",
+                format!(
+                    "#!/bin/sh\n[ \"$MANY_AI_CLI_HUB_TOKEN\" = '{expected}' ] && \
+                     [ \"$MANY_AI_CLI_SESSION_ID\" = 17 ] && \
+                     [ -z \"${{ANY_AI_CLI_HUB_TOKEN+x}}${{MANY_AI_CLI_LOCAL_PROOF+x}}\" ] || exit 1\n\
+                     printf 'synthetic only' > did-run\n"
+                ).as_bytes(),
+            );
             let server = hub(listener, None);
             let result = run(
                 &fixture,

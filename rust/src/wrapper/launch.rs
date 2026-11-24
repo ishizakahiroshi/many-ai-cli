@@ -15,6 +15,13 @@ use std::{
 };
 
 pub const HUB_TOKEN_ENV: &str = "MANY_AI_CLI_HUB_TOKEN";
+pub(crate) const SESSION_ENV: &[&str] = &[
+    HUB_TOKEN_ENV,
+    "ANY_AI_CLI_HUB_TOKEN",
+    crate::hub::pin::LOCAL_PROOF_ENV,
+    "ANY_AI_CLI_LOCAL_PROOF",
+    "MANY_AI_CLI_SESSION_ID",
+];
 pub const DELEGATION_ENV: &str = "MANY_AI_CLI_DELEGATION";
 pub const SESSION_ID_PLACEHOLDER: &str = "{{many-ai-cli:session-id}}";
 pub const LAUNCH_PROMPT_MAX_ARG_COST: usize = 24_000;
@@ -751,6 +758,7 @@ pub fn child_env(base: &[String], terminal_color: &str, extra: &[String]) -> Vec
         result.extend(strings(&["NO_COLOR=1", "FORCE_COLOR=0"]));
     }
     result.extend_from_slice(extra);
+    let result = env_without(&result, SESSION_ENV);
     env_without(
         &result,
         &[
@@ -758,6 +766,34 @@ pub fn child_env(base: &[String], terminal_color: &str, extra: &[String]) -> Vec
             crate::wrapper::iris_owner::OWNER_ENV,
         ],
     )
+}
+/// Registration assigned this identity to the provider. Discard previous
+/// values, including differently cased names supplied by a parent shell.
+pub(super) fn set_session_environment(
+    plan: &mut crate::process::ProcessPlan,
+    ack: &crate::proto::Message,
+) {
+    let matches = |key: &std::ffi::OsStr| {
+        SESSION_ENV
+            .iter()
+            .any(|name| key.eq_ignore_ascii_case(std::ffi::OsStr::new(name)))
+    };
+    plan.env.retain(|name, _| !matches(name));
+    // Unix can inherit distinct case variants. Windows folds names on process
+    // creation, so only the canonical override may be present there.
+    #[cfg(unix)]
+    for (name, _) in std::env::vars_os().filter(|(name, _)| matches(name)) {
+        plan.env.insert(name, None);
+    }
+    for name in SESSION_ENV {
+        plan.env.insert((*name).into(), None);
+    }
+    plan.env.insert(
+        "MANY_AI_CLI_SESSION_ID".into(),
+        Some(ack.session_id.to_string().into()),
+    );
+    plan.env
+        .insert(HUB_TOKEN_ENV.into(), Some(ack.token.clone().into()));
 }
 pub fn env_without(env: &[String], names: &[&str]) -> Vec<String> {
     env.iter()

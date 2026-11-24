@@ -345,6 +345,37 @@ impl OrchestrationProgram {
     pub fn relay_owns(&self, id: &OrchestrationId) -> bool {
         lock(&self.state).relay_boards.contains(id)
     }
+    /// Display numbers may be allocated again on another day. A provider's
+    /// scoped credential may address only children of this parent incarnation.
+    pub(crate) fn owns_scoped_child(
+        &self,
+        parent: &SessionDetails,
+        child: &SessionDetails,
+    ) -> bool {
+        if child.snapshot.parent_session_id != parent.binding.session {
+            return false;
+        }
+        let state = lock(&self.state);
+        let board_id = &child.snapshot.orchestration_id;
+        if let Some(registration) = state
+            .boards
+            .get(board_id)
+            .and_then(|board| board.children.get(&child.binding.session))
+        {
+            let r = &registration.registration;
+            return r.binding.incarnation == child.binding.incarnation
+                && r.parent.session == parent.binding.session
+                && r.parent.incarnation == parent.binding.incarnation;
+        }
+        // Cold relay reattach reconstructs metadata from its durable launch
+        // identities. Ordinary manually registered sessions have no board.
+        state.relay_boards.contains(board_id)
+            && state
+                .boards
+                .get(board_id)
+                .and_then(|b| b.conductor_bindings.get(&parent.binding.session))
+                .is_some_and(|b| b.incarnation == parent.binding.incarnation)
+    }
     pub fn launch_instruction_not_taken(
         &self,
         session: LiveSessionId,

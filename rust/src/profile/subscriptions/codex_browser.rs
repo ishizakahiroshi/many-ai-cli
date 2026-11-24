@@ -1,9 +1,8 @@
 //! Codex Desktop unpacks its bundled plugin marketplace (`openai-bundled`,
 //! which carries the Browser and Chrome plugins and their skills) only into
 //! the default Codex home, under `.tmp/bundled-marketplaces`. A subscription
-//! profile is a different `CODEX_HOME`: the synced `config.toml` names the
-//! marketplace, but Codex ignores it there, refuses to add `openai-bundled`
-//! again ("reserved"), and a session cannot find the browser skills.
+//! profile is a different `CODEX_HOME`. Codex reserves `openai-bundled`;
+//! registering that marketplace again in the profile cannot install it.
 //!
 //! Linking the profile's `.tmp/bundled-marketplaces` to the default one makes
 //! the marketplace visible to the profile, and `codex plugin add` then

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7147b05078c831dc755558c102aaa8efb355fba0",
+    "commit": "77341f0e70380baa671bc0be660c39ca0c94ea4c",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2153,
-    "analyzed": 1691,
+    "discovered": 2154,
+    "analyzed": 1692,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -30750,6 +30750,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/hub/child_token.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "A provider credential is usable only while its authenticated wrapper owns"
         },
         "authentication": {
           "state": "not_configured"

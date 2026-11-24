@@ -15,6 +15,7 @@ pub struct ServiceRouter {
     pub config: Arc<ConfigStore>,
     pub paths: RuntimePaths,
     pub auth: AuthService,
+    pub(crate) child_tokens: super::child_token::ChildTokens,
     pub(crate) core: Option<Arc<dyn SessionCore>>,
     bound_port: u16,
     memos: Option<Arc<crate::routine::memo::MemoManager>>,
@@ -108,13 +109,65 @@ impl ServiceRouter {
     /// Handler entry repeats this check against a fresh config snapshot so a
     /// concurrent revocation cannot authorize a request that was still reading.
     pub fn preflight(&self, request: &Request, now: i64) -> Result<(), Response> {
-        self.preflight_inner(request, now).map_err(|error| {
-            if request.path == "/api/info" {
-                error.no_store()
-            } else {
-                error
+        self.preflight_authority(request, now)
+            .map(|_| ())
+            .map_err(|error| {
+                if request.path == "/api/info" {
+                    error.no_store()
+                } else {
+                    error
+                }
+            })
+    }
+    fn preflight_authority(
+        &self,
+        request: &Request,
+        now: i64,
+    ) -> Result<Option<crate::proto::core::SessionBinding>, Response> {
+        if !auth::presents_child_token(request) {
+            self.preflight_inner(request, now)?;
+            return Ok(None);
+        }
+        let refused =
+            || Response::error(401, "unauthorized", "session credential refused").no_store();
+        let token = auth::bearer(request);
+        let id = super::child_token::session(token).ok_or_else(refused)?;
+        if !request.query("token").is_empty() || auth::logically_remote(request) {
+            return Err(refused());
+        }
+        let methods = if request.path == super::usage_routes::PATH {
+            &["POST"][..]
+        } else {
+            let parent = super::confirmations::parent_path(&request.path).map_err(|_| refused())?;
+            if id.0 != parent {
+                return Err(refused());
             }
-        })
+            match request.path.rsplit('/').next() {
+                Some("spawn-child" | "send-child" | "close-child" | "relay-stop") => &["POST"][..],
+                Some("relay") => &["GET", "POST"][..],
+                _ => return Err(refused()),
+            }
+        };
+        let config = self
+            .config
+            .snapshot()
+            .map_err(|_| Response::error(500, "internal", "configuration unavailable"))?
+            .config;
+        let details = self
+            .core
+            .as_ref()
+            .and_then(|core| core.details(id))
+            .filter(|details| {
+                details.connected
+                    && self
+                        .child_tokens
+                        .valid(token, &config.token, details.binding)
+            })
+            .ok_or_else(refused)?;
+        // The credential is issued to a wrapper during its authenticated local
+        // registration. Its proof of locality applies only to these operations.
+        auth::guard_shape(request, &config, i64::from(self.bound_port), methods)?;
+        Ok(Some(details.binding))
     }
     fn preflight_inner(&self, request: &Request, now: i64) -> Result<(), Response> {
         if request.path == super::iris_execution::PATH {
@@ -221,6 +274,7 @@ impl ServiceRouter {
             config,
             paths,
             auth: AuthService::default(),
+            child_tokens: Default::default(),
             core: Some(core),
             bound_port,
             memos: None,
@@ -530,14 +584,16 @@ impl ServiceRouter {
         self
     }
     /// The dashboard's proof: the signed UI cookie plus same-origin Fetch
-    /// Metadata and an allowed Origin. A request that only holds the Hub token
-    /// (a child session, a routine, `orchestrate`) never gets one.
+    /// Metadata and an allowed Origin. Provider credentials cannot claim it.
     fn ui_proof(
         &self,
         request: &Request,
         now: i64,
         epoch: Option<crate::proto::core::AuthEpoch>,
     ) -> Option<crate::proto::core::VerifiedUiOrigin> {
+        if auth::presents_child_token(request) {
+            return None;
+        }
         self.config.snapshot().ok().and_then(|snapshot| {
             let config = snapshot.config;
             let bound = self.auth.valid_ui_cookie(request, &config, now)
@@ -577,9 +633,10 @@ impl ServiceRouter {
             .duration_since(crate::proto::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
-        if let Err(error) = self.preflight(request, now) {
-            return Dispatch::response(error);
-        }
+        let scoped = match self.preflight_authority(request, now) {
+            Ok(scoped) => scoped,
+            Err(error) => return Dispatch::response(error),
+        };
         if request.path == super::iris_execution::PATH {
             return Dispatch::response(
                 self.iris_execution
@@ -781,7 +838,7 @@ impl ServiceRouter {
             };
             return Dispatch::response(
                 owner
-                    .handle_authenticated(request, waiter, at)
+                    .handle_scoped(request, waiter, at, scoped)
                     .await
                     .expect("recognized relay route"),
             );
@@ -790,7 +847,7 @@ impl ServiceRouter {
             return Dispatch::response(
                 self.child_controls
                     .as_ref()
-                    .map(|controls| controls.handle_authenticated(request, at))
+                    .map(|controls| controls.handle_scoped(request, at, scoped))
                     .unwrap_or_else(|| {
                         Response::error(
                             503,
@@ -835,7 +892,7 @@ impl ServiceRouter {
         if super::child_routes::is_spawn_route(&request.path) {
             let ui = self.ui_proof(request, now, epoch);
             return Dispatch::response(match &self.children {
-                Some(children) => children.spawn_authenticated(request, ui, waiter, at).await,
+                Some(children) => children.spawn_scoped(request, ui, waiter, at, scoped).await,
                 None => Response::error(
                     503,
                     "spawn_unavailable",
@@ -1049,7 +1106,7 @@ impl ServiceRouter {
         if super::usage_routes::is_route(&request.path) {
             return Dispatch::response(match &self.usage {
                 Some(owner) => owner
-                    .handle_authenticated(request, at)
+                    .handle_scoped(request, at, scoped)
                     .await
                     .expect("recognized usage route"),
                 None => Response::error(503, "usage_unavailable", "usage service unavailable"),
@@ -1188,6 +1245,7 @@ impl ServiceRouter {
             config,
             paths,
             auth: AuthService::default(),
+            child_tokens: Default::default(),
             core: None,
             bound_port,
             memos: None,
@@ -1425,6 +1483,12 @@ impl ServiceRouter {
         now: i64,
         at: crate::proto::time::Timestamp,
     ) -> Dispatch {
+        // Session-scoped routes are served by the owned async dispatcher.
+        if auth::presents_child_token(request) {
+            return Dispatch::response(
+                Response::error(401, "unauthorized", "session credential refused").no_store(),
+            );
+        }
         if request.path == super::iris_execution::PATH {
             if let Err(error) = self.preflight(request, now) {
                 return Dispatch::response(error);

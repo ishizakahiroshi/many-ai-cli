@@ -4,7 +4,7 @@
 use super::http::{Request, Response, decode_json, require_method};
 use crate::{
     application::relay_program::{
-        RelayControlRequest, RelayError, RelayProgram, RelayStartRequest,
+        RelayControlRequest, RelayError, RelayParent, RelayProgram, RelayStartRequest,
     },
     proto::{core::*, time::Timestamp},
 };
@@ -37,6 +37,15 @@ impl RelayHttp {
         waiter: &HttpWaitCancellation,
         now: Timestamp,
     ) -> Option<Response> {
+        self.handle_scoped(request, waiter, now, None).await
+    }
+    pub(crate) async fn handle_scoped(
+        &self,
+        request: &Request,
+        waiter: &HttpWaitCancellation,
+        now: Timestamp,
+        scoped: Option<SessionBinding>,
+    ) -> Option<Response> {
         if !is_relay_route(&request.path) {
             return None;
         }
@@ -53,8 +62,17 @@ impl RelayHttp {
             .rsplit('/')
             .next()
             .unwrap_or("");
+        if scoped.is_some_and(|b| b.session != parent || !matches!(action, "relay" | "relay-stop"))
+        {
+            return Some(Response::error(
+                403,
+                "forbidden",
+                "session operation is outside credential scope",
+            ));
+        }
+        let actor = scoped.map_or_else(|| RelayParent::from(parent), RelayParent::from);
         if action == "relay" && request.method == "GET" {
-            return Some(match self.program.list(parent) {
+            return Some(match self.program.list(actor) {
                 Ok(items) => Response::json(200, &serde_json::json!({"ok":true,"relays":items})),
                 Err(error) => response(error),
             });
@@ -92,8 +110,8 @@ impl RelayHttp {
         let cancel = permit.cancellation();
         let program = self.program.clone();
         let complete=permit.start(async move{match operation{
-            Operation::Start(body)=>match program.start_relay(parent,body,now,cancel).await{Ok((status,board))=>Response::json(200,&serde_json::json!({"ok":true,"orchestration_id":status.orchestration_id,"board_path":board,"implementation_session_id":status.implementation_session_id,"worktree_path":status.worktree_path,"branch":status.branch,"relay":status})),Err(error)=>response(error)},
-            Operation::Stop(id)=>control(program.stop_relay(parent,&id,now).await),
+            Operation::Start(body)=>match program.start_relay(actor,body,now,cancel).await{Ok((status,board))=>Response::json(200,&serde_json::json!({"ok":true,"orchestration_id":status.orchestration_id,"board_path":board,"implementation_session_id":status.implementation_session_id,"worktree_path":status.worktree_path,"branch":status.branch,"relay":status})),Err(error)=>response(error)},
+            Operation::Stop(id)=>control(program.stop_relay(actor,&id,now).await),
             Operation::Resume(id)=>control(program.resume_relay(parent,&id,now,cancel).await),
             Operation::Cleanup(id)=>control(program.cleanup_relay(parent,&id,now,cancel).await),
         }});

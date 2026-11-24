@@ -211,6 +211,14 @@ async fn missing_auth_keeps_claude_status_and_never_posts() {
     assert!(!output.is_empty());
     assert!(io.posts.lock().unwrap().is_empty());
 }
+
+#[test]
+fn session_without_a_credential_ignores_legacy_hook_token_arguments() {
+    let mut argv = args("claude");
+    argv.extend(["--token".into(), "legacy-fixture".into()]);
+    let options = parse(&argv, &["MANY_AI_CLI_SESSION_ID=4".into()], &|_| {}).unwrap();
+    assert!(options.token.is_empty());
+}
 #[test]
 fn flag_integer_source_and_environment_token_precedence() {
     let warnings = Mutex::new(vec![]);

@@ -305,6 +305,8 @@ fn cmd_text_unsafe(value: &str) -> bool {
 
 fn protected_environment_names(environment: &[String]) -> Vec<String> {
     let exact = [
+        "ANY_AI_CLI_HUB_TOKEN",
+        "ANY_AI_CLI_LOCAL_PROOF",
         "COMSPEC",
         "PATHEXT",
         "TERM",

@@ -2,7 +2,10 @@ use super::{SeedNotice, check_path, default_dir, env_value, invalid, links};
 use crate::{
     config::{Resource, RuntimePaths, SubscriptionProfile},
     files::safe_fs::Dir,
-    profile::{persistence::seed_codex, seed::SyncOptions},
+    profile::{
+        persistence::seed_codex,
+        seed::{SettingsFormat, SyncOptions, merge_toml_preferences},
+    },
 };
 use serde_json::value::RawValue;
 use std::{
@@ -29,7 +32,6 @@ const CLAUDE_STATE: &[&str] = &[
 ];
 #[derive(Clone, Copy)]
 enum Kind {
-    Copy,
     Mirror,
     Directory,
     ClaudeState,
@@ -69,7 +71,6 @@ fn entries(
         "grok" => &[
             ("AGENTS.md", Kind::Mirror),
             ("config.toml", Kind::Toml),
-            ("trusted_folders.toml", Kind::Copy),
             ("skills", Kind::Directory),
         ],
         _ => return Err(invalid("unsupported profile seeding")),
@@ -103,6 +104,7 @@ fn entries(
     Ok(entries)
 }
 pub struct DiagnosticEntry {
+    pub(super) format: Option<SettingsFormat>,
     pub(crate) trial_root: Option<PathBuf>,
     pub source: PathBuf,
     pub dest: &'static str,
@@ -172,7 +174,6 @@ pub fn diagnostic_entries(
                 (_, "skills") => "スキル（skills/）",
                 (_, "agents") => "サブエージェント（agents/）",
                 (_, "prompts") => "カスタム スラッシュコマンド（prompts/）",
-                (_, "trusted_folders.toml") => "信頼済みフォルダ（trusted_folders.toml）",
                 (_, ".claude.json") => "ブラウザ操作の既定（.claude.json の名指しキーのみ）",
                 _ => entry.dest,
             };
@@ -187,6 +188,12 @@ pub fn diagnostic_entries(
                 }
             };
             Ok(DiagnosticEntry {
+                format: match entry.kind {
+                    Kind::Codex => Some(SettingsFormat::Codex),
+                    Kind::Toml => Some(SettingsFormat::Grok),
+                    Kind::Json => Some(SettingsFormat::Claude),
+                    _ => None,
+                },
                 trial_root: paths.is_trial().then(|| paths.root().to_path_buf()),
                 source: entry.source,
                 dest: entry.dest,
@@ -214,15 +221,22 @@ pub fn sync_drift(
                 .and_then(|v| v.parse::<DocumentMut>().ok())
                 .ok_or_else(|| invalid("settings is not a TOML document"))
         };
-        let defaults = parse(&defaults)?;
+        let Some(format) = entry.format else {
+            return Ok((added, changed));
+        };
+        let source = parse(&defaults)?;
+        let defaults = format.toml_defaults(&source);
         let current = parse(&current)?;
+        format
+            .check_toml_policy(&source, &current, &defaults, |key| owned.contains(key))
+            .map_err(io::Error::other)?;
         for (key, value) in defaults.iter() {
             if owned.contains(key) {
                 continue;
             }
             match current.get(key) {
                 None => added.push(key.into()),
-                Some(old) if diagnostic_toml(old) != diagnostic_toml(value) => {
+                Some(old) if !crate::profile::seed::same_preference(key, old, value) => {
                     changed.push(key.into())
                 }
                 _ => {}
@@ -230,19 +244,21 @@ pub fn sync_drift(
         }
     } else {
         let parse = |data: &[u8]| {
-            serde_json::from_slice::<Option<BTreeMap<String, serde_json::Value>>>(data)
+            serde_json::from_slice::<Option<BTreeMap<String, Box<RawValue>>>>(data)
                 .map(|v| v.unwrap_or_default())
                 .map_err(|_| invalid("settings is not a JSON object"))
         };
-        let defaults = parse(&defaults)?;
         let current = parse(&current)?;
+        let defaults = claude_defaults(&defaults, &current, |key| owned.contains(key))?;
         for (key, value) in defaults {
-            if owned.contains(&key) {
-                continue;
-            }
             match current.get(&key) {
                 None => added.push(key),
-                Some(old) if diagnostic_json(old.clone()) != diagnostic_json(value) => {
+                Some(old)
+                    if serde_json::from_str::<serde_json::Value>(old.get())
+                        .ok()
+                        .as_ref()
+                        != Some(&value) =>
+                {
                     changed.push(key)
                 }
                 _ => {}
@@ -252,72 +268,6 @@ pub fn sync_drift(
     added.sort();
     changed.sort();
     Ok((added, changed))
-}
-fn diagnostic_json(value: serde_json::Value) -> serde_json::Value {
-    use serde_json::Value;
-    match value {
-        Value::Number(n) => n
-            .as_f64()
-            .and_then(serde_json::Number::from_f64)
-            .map(Value::Number)
-            .unwrap_or(Value::Null),
-        Value::Array(a) => Value::Array(a.into_iter().map(diagnostic_json).collect()),
-        Value::Object(o) => Value::Object(
-            o.into_iter()
-                .map(|(k, v)| (k, diagnostic_json(v)))
-                .collect(),
-        ),
-        other => other,
-    }
-}
-#[derive(PartialEq)]
-enum DiagnosticToml {
-    None,
-    String(String),
-    Integer(i64),
-    Float(f64),
-    Bool(bool),
-    Date(String),
-    Array(Vec<DiagnosticToml>),
-    Map(BTreeMap<String, DiagnosticToml>),
-}
-fn diagnostic_toml(item: &toml_edit::Item) -> DiagnosticToml {
-    match item {
-        toml_edit::Item::None => DiagnosticToml::None,
-        toml_edit::Item::Value(v) => diagnostic_value(v),
-        toml_edit::Item::Table(t) => DiagnosticToml::Map(
-            t.iter()
-                .map(|(k, v)| (k.into(), diagnostic_toml(v)))
-                .collect(),
-        ),
-        toml_edit::Item::ArrayOfTables(t) => DiagnosticToml::Array(
-            t.iter()
-                .map(|t| {
-                    DiagnosticToml::Map(
-                        t.iter()
-                            .map(|(k, v)| (k.into(), diagnostic_toml(v)))
-                            .collect(),
-                    )
-                })
-                .collect(),
-        ),
-    }
-}
-fn diagnostic_value(v: &toml_edit::Value) -> DiagnosticToml {
-    use toml_edit::Value;
-    match v {
-        Value::String(v) => DiagnosticToml::String(v.value().clone()),
-        Value::Integer(v) => DiagnosticToml::Integer(*v.value()),
-        Value::Float(v) => DiagnosticToml::Float(*v.value()),
-        Value::Boolean(v) => DiagnosticToml::Bool(*v.value()),
-        Value::Datetime(v) => DiagnosticToml::Date(v.value().to_string()),
-        Value::Array(v) => DiagnosticToml::Array(v.iter().map(diagnostic_value).collect()),
-        Value::InlineTable(v) => DiagnosticToml::Map(
-            v.iter()
-                .map(|(k, v)| (k.into(), diagnostic_value(v)))
-                .collect(),
-        ),
-    }
 }
 // Both callers hand over the launcher's fields one by one; a parameter struct
 // would only rename them.
@@ -333,16 +283,15 @@ pub(super) fn run(
     codex_plugin_installer: &std::sync::Arc<super::codex_browser::Installer>,
 ) -> io::Result<SeedNotice> {
     let mut notice = SeedNotice::default();
-    for mut entry in entries(paths, home, hub_cwd, environment, provider)? {
+    for entry in entries(paths, home, hub_cwd, environment, provider)? {
         check_path(paths, &entry.source)?;
-        if std::fs::symlink_metadata(&entry.source).is_err() {
-            continue;
+        match std::fs::symlink_metadata(&entry.source) {
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error),
         }
         let exists = destination.metadata(entry.dest).is_ok()
             || std::fs::symlink_metadata(destination.path().join(entry.dest)).is_ok();
-        if profile.settings_sync == Some(false) && matches!(entry.kind, Kind::Json | Kind::Toml) {
-            entry.kind = Kind::Copy;
-        }
         if exists && !matches!(entry.kind, Kind::Json | Kind::Toml | Kind::Codex) {
             continue;
         }
@@ -361,7 +310,12 @@ pub(super) fn run(
             }
             // A missing implementation is different from Go's ordinary per-file
             // seed I/O failure. Do not pretend an unsupported seed succeeded.
-            Err(error) if error.kind() == io::ErrorKind::Unsupported => return Err(error),
+            Err(error)
+                if error.kind() == io::ErrorKind::Unsupported
+                    || matches!(entry.kind, Kind::Json | Kind::Codex | Kind::Toml) =>
+            {
+                return Err(error);
+            }
             Err(_) => notice.failed.push(entry.dest.into()),
         }
     }
@@ -436,9 +390,6 @@ fn apply(
             }
             destination.create_new(entry.dest, &read(&entry.source)?, 0o600)?;
         }
-        Kind::Copy => {
-            destination.create_new(entry.dest, &read(&entry.source)?, 0o600)?;
-        }
         Kind::Codex => {
             let options = SyncOptions {
                 enabled: profile.settings_sync.unwrap_or(true),
@@ -454,11 +405,11 @@ fn apply(
             else {
                 return Ok(None);
             };
-            root.retain(|key, _| {
+            root.retain(|key, value| {
                 matches!(
                     key.as_str(),
                     "claudeInChromeDefaultEnabled" | "hasCompletedClaudeInChromeOnboarding"
-                )
+                ) && matches!(value.get(), "true" | "false")
             });
             if root.is_empty() {
                 return Ok(None);
@@ -470,20 +421,41 @@ fn apply(
         }
         Kind::Json | Kind::Toml => {
             let source = read(&entry.source)?;
-            if !exists {
-                destination.create_new(entry.dest, &source, 0o600)?;
-                return Ok(Some((false, vec![])));
-            }
-            let existing = destination.read(entry.dest, LIMIT + 1)?;
+            let existing = if exists {
+                destination.read(entry.dest, LIMIT + 1)?
+            } else if matches!(entry.kind, Kind::Json) {
+                b"{}".to_vec()
+            } else {
+                vec![]
+            };
             if existing.len() > LIMIT {
                 return Err(invalid("profile settings exceeds size limit"));
             }
-            let (data, changed) = if matches!(entry.kind, Kind::Json) {
-                merge_json(&source, &existing, &owned(profile, CLAUDE_STATE))?
+            let profile_owned = if !exists {
+                BTreeSet::new()
+            } else if matches!(entry.kind, Kind::Json) {
+                owned(profile, CLAUDE_STATE)
             } else {
-                merge_toml(&source, &existing, &owned(profile, &["cli", "ui"]))?
+                owned(profile, &["cli", "ui"])
             };
-            if !changed.is_empty() {
+            let (data, changed) = if matches!(entry.kind, Kind::Json) {
+                merge_json(
+                    &source,
+                    &existing,
+                    &profile_owned,
+                    !exists || profile.settings_sync != Some(false),
+                )?
+            } else {
+                merge_toml(
+                    &source,
+                    &existing,
+                    &profile_owned,
+                    !exists || profile.settings_sync != Some(false),
+                )?
+            };
+            if !exists {
+                destination.create_new(entry.dest, &data, 0o600)?;
+            } else if !changed.is_empty() {
                 destination.replace(entry.dest, &data, 0o600)?;
             }
             return Ok(Some((false, changed)));
@@ -491,30 +463,187 @@ fn apply(
     }
     Ok(Some((false, vec![])))
 }
+fn claude_defaults(
+    data: &[u8],
+    existing: &BTreeMap<String, Box<RawValue>>,
+    keep_local: impl Fn(&str) -> bool,
+) -> io::Result<BTreeMap<String, serde_json::Value>> {
+    let input = serde_json::from_slice::<Option<BTreeMap<String, Box<RawValue>>>>(data)
+        .map_err(|_| invalid("default settings is not a JSON object"))?
+        .unwrap_or_default();
+    let required_local = || io::Error::other(crate::profile::seed::SeedError::LocalPolicyRequired);
+    let mut defaults = BTreeMap::new();
+    for (key, raw) in input {
+        use serde_json::Value;
+        let value = || serde_json::from_str::<Value>(raw.get()).map_err(|_| required_local());
+        if matches!(raw.get().as_bytes().first(), Some(b'"' | b't' | b'f')) {
+            let value = value()?;
+            if value
+                .as_str()
+                .is_some_and(|s| SettingsFormat::Claude.permits_string(&key, s))
+                || value.is_boolean() && SettingsFormat::Claude.permits_bool(&key)
+            {
+                defaults.insert(key, value);
+                continue;
+            }
+        }
+        let mut required = match key.as_str() {
+            "permissions"
+            | "hooks"
+            | "sandbox"
+            | "allowedMcpServers"
+            | "deniedMcpServers"
+            | "blockedMarketplaces"
+            | "strictKnownMarketplaces"
+            | "allowManagedHooksOnly"
+            | "allowManagedPermissionRulesOnly"
+            | "allowManagedMcpServersOnly"
+            | "disableAllHooks"
+            | "disableBypassPermissionsMode"
+            | "disableAutoMode" => value()?,
+            _ => continue,
+        };
+        let mut portable = false;
+        match key.as_str() {
+            "permissions" => {
+                let rules = required.as_object_mut().ok_or_else(required_local)?;
+                // Omitting a grant cannot broaden the new profile's permissions.
+                rules.remove("allow");
+                rules.remove("additionalDirectories");
+                if rules.is_empty() {
+                    continue;
+                }
+                portable = rules.iter().all(|(k, v)| match k.as_str() {
+                    "disableBypassPermissionsMode" | "disableAutoMode" => {
+                        v.as_str() == Some("disable")
+                    }
+                    "defaultMode" => matches!(
+                        v.as_str(),
+                        Some("default" | "plan" | "acceptEdits" | "dontAsk" | "auto")
+                    ),
+                    "blockWritesOutsideWorkingDirectories" => v.is_boolean(),
+                    "ask" | "deny" => v.as_array().is_some_and(|a| {
+                        a.iter().all(|v| {
+                            matches!(
+                                v.as_str(),
+                                Some(
+                                    "Read"
+                                        | "Write"
+                                        | "Edit"
+                                        | "Bash"
+                                        | "WebFetch"
+                                        | "WebSearch"
+                                        | "Glob"
+                                        | "Grep"
+                                        | "NotebookEdit"
+                                        | "Agent"
+                                        | "Task"
+                                        | "Skill"
+                                )
+                            )
+                        })
+                    }),
+                    _ => false,
+                });
+            }
+            "sandbox" => {
+                portable = required.as_object().is_some_and(|fields| {
+                    fields.iter().all(|(k, v)| {
+                        matches!(
+                            k.as_str(),
+                            "enabled"
+                                | "autoAllowBashIfSandboxed"
+                                | "allowUnsandboxedCommands"
+                                | "failIfUnavailable"
+                        ) && v.is_boolean()
+                    })
+                });
+            }
+            "hooks" => {
+                let hooks = required.as_object_mut().ok_or_else(required_local)?;
+                hooks.retain(|event, _| {
+                    matches!(
+                        event.as_str(),
+                        "PreToolUse" | "PermissionRequest" | "UserPromptSubmit"
+                    )
+                });
+                if hooks.is_empty() {
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        if let Some(local) = existing.get(&key) {
+            let local: Value = serde_json::from_str(local.get()).map_err(|_| required_local())?;
+            let matches = match key.as_str() {
+                // Allow additional profile-local controls; every required member
+                // must still match before permitting a launch.
+                "permissions" | "hooks" => required
+                    .as_object()
+                    .is_some_and(|fields| fields.iter().all(|(k, v)| local.get(k) == Some(v))),
+                _ => local == required,
+            };
+            if !matches {
+                return Err(required_local());
+            }
+        } else if portable {
+            defaults.insert(key, required);
+        } else {
+            return Err(required_local());
+        }
+    }
+    for (key, value) in &defaults {
+        if keep_local(key)
+            && matches!(
+                key.as_str(),
+                "permissions"
+                    | "sandbox"
+                    | "disableBypassPermissionsMode"
+                    | "disableAutoMode"
+                    | "allowManagedHooksOnly"
+                    | "allowManagedPermissionRulesOnly"
+                    | "allowManagedMcpServersOnly"
+                    | "disableAllHooks"
+            )
+            && !existing.get(key).is_some_and(|raw| {
+                serde_json::from_str::<serde_json::Value>(raw.get())
+                    .ok()
+                    .as_ref()
+                    == Some(value)
+            })
+        {
+            return Err(required_local());
+        }
+    }
+    defaults.retain(|key, _| !keep_local(key));
+    Ok(defaults)
+}
 fn merge_json(
     defaults: &[u8],
     existing: &[u8],
     owned: &BTreeSet<String>,
+    sync: bool,
 ) -> io::Result<(Vec<u8>, Vec<String>)> {
     type Object = BTreeMap<String, Box<RawValue>>;
-    let defaults = serde_json::from_slice::<Option<Object>>(defaults)
-        .map_err(|_| invalid("default settings is not a JSON object"))?
-        .unwrap_or_default();
     let mut profile = serde_json::from_slice::<Option<Object>>(existing)
         .map_err(|_| invalid("profile settings is not a JSON object"))?
         .unwrap_or_default();
+    let defaults = claude_defaults(defaults, &profile, |key| !sync || owned.contains(key))?;
     let mut changed = vec![];
     for (key, value) in defaults {
-        if owned.contains(&key) {
-            continue;
-        }
         // Compare parsed values, while retaining each raw value for writes.
         let same = profile.get(&key).is_some_and(|old| {
-            serde_json::from_str::<serde_json::Value>(old.get()).ok()
-                == serde_json::from_str::<serde_json::Value>(value.get()).ok()
+            serde_json::from_str::<serde_json::Value>(old.get())
+                .ok()
+                .as_ref()
+                == Some(&value)
         });
         if !same {
-            profile.insert(key.clone(), value);
+            profile.insert(
+                key.clone(),
+                serde_json::value::to_raw_value(&value)
+                    .map_err(|_| invalid("cannot encode profile setting"))?,
+            );
             changed.push(key);
         }
     }
@@ -527,6 +656,7 @@ fn merge_toml(
     defaults: &[u8],
     existing: &[u8],
     owned: &BTreeSet<String>,
+    sync: bool,
 ) -> io::Result<(Vec<u8>, Vec<String>)> {
     let parse = |data: &[u8]| {
         std::str::from_utf8(data)
@@ -534,22 +664,16 @@ fn merge_toml(
             .and_then(|s| s.parse::<DocumentMut>().ok())
             .ok_or_else(|| invalid("settings is not a TOML document"))
     };
-    let defaults = parse(defaults)?;
+    let source = parse(defaults)?;
+    let defaults = SettingsFormat::Grok.toml_defaults(&source);
     let mut profile = parse(existing)?;
-    let mut changed = vec![];
-    for (key, value) in defaults.iter() {
-        if owned.contains(key) {
-            continue;
-        }
-        if profile
-            .get(key)
-            .is_some_and(|old| old.to_string() == value.to_string())
-        {
-            continue;
-        }
-        profile.insert(key, value.clone());
-        changed.push(key.into());
-    }
-    changed.sort();
+    SettingsFormat::Grok
+        .check_toml_policy(&source, &profile, &defaults, |k| !sync || owned.contains(k))
+        .map_err(io::Error::other)?;
+    let changed = if sync {
+        merge_toml_preferences(&defaults, &mut profile, owned)
+    } else {
+        Vec::new()
+    };
     Ok((profile.to_string().into_bytes(), changed))
 }

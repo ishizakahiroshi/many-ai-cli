@@ -144,6 +144,14 @@ pub fn parse(
         .unwrap_or("");
     if !environment_token.is_empty() {
         options.token = environment_token.into();
+    } else if environment.iter().any(|entry| {
+        entry
+            .split_once('=')
+            .is_some_and(|(name, _)| name.eq_ignore_ascii_case("MANY_AI_CLI_SESSION_ID"))
+    }) {
+        // A legacy hook may still put an owner token on its command line.
+        // Only the credential assigned to this session can authorize its report.
+        options.token.clear();
     } else if !options.token.is_empty() {
         warning("deprecated token argument");
     }
@@ -263,13 +271,8 @@ impl RelayIo for NativeRelayIo {
                 .timeout(std::time::Duration::from_secs(5))
                 .build()
                 .map_err(io::Error::other)?;
-            // The wrapper hands the CLI's local proof down with the token (U09).
-            let proof = std::env::var(crate::hub::pin::LOCAL_PROOF_ENV).ok();
             let mut request = client
                 .post(format!("{hub}/api/session-usage"))
-                .headers(crate::application::hub_runtime::local_proof_headers(
-                    proof.as_deref().filter(|proof| !proof.is_empty()),
-                ))
                 .header("Content-Type", "application/json")
                 .body(bytes);
             if !token.is_empty() {

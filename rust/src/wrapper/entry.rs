@@ -530,13 +530,6 @@ pub async fn run_cli(
     for name in internal_launch_env {
         process.env.insert(name.into(), None);
     }
-    // The usage relay and `orchestrate` inside the session send this next to
-    // the token, so a Hub with a PIN set counts them as on this machine (U09).
-    // Without a PIN there is no proof, and an inherited one is removed.
-    process.env.insert(
-        crate::hub::pin::LOCAL_PROOF_ENV.into(),
-        crate::hub::pin::cli_local_proof(context.config).map(Into::into),
-    );
     let mut prepared_payload = None;
     if let (Some((mode, shell_executable)), Some(command)) = (&selected_shell, &command) {
         super::launch_payload::validate_inner_cmd(command)?;
@@ -829,14 +822,7 @@ async fn run_headless(
     }
     process.executable = command.executable.into();
     process.args = command.args.into_iter().map(Into::into).collect();
-    process.env.insert(
-        "MANY_AI_CLI_SESSION_ID".into(),
-        Some(registered.session_id.to_string().into()),
-    );
-    process.env.insert(
-        "MANY_AI_CLI_HUB_TOKEN".into(),
-        Some(context.config.token.clone().into()),
-    );
+    launch::set_session_environment(&mut process, &registered);
     let child_cancel = Cancellation::default();
     let output_cancel = child_cancel.clone();
     let (tx, mut outputs) = tokio::sync::mpsc::channel::<Vec<u8>>(1024);

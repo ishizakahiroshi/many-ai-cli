@@ -27,6 +27,9 @@ use std::{
 };
 use tokio::sync::mpsc;
 
+fn fixture_credential(id: i64) -> String {
+    format!("child-v1.{id}.{}.{}", "a".repeat(64), "b".repeat(64))
+}
 fn plan(root: &std::path::Path) -> ProcessPlan {
     ProcessPlan {
         executable: "/bin/sh".into(),
@@ -306,6 +309,7 @@ async fn wrapper_actual_runtime_register_input_ack_reconnect_replay_and_dismiss(
         .send(Message {
             r#type: "registered".into(),
             session_id: 7,
+            token: fixture_credential(7),
             cols: 80,
             rows: 24,
             ..Default::default()
@@ -329,6 +333,8 @@ async fn wrapper_actual_runtime_register_input_ack_reconnect_replay_and_dismiss(
     drop(first_tx);
     let reattach = receive_type(&mut second_rx, "reattach").await;
     assert_eq!(reattach.session_id, 7);
+    let carried: serde_json::Value = serde_json::from_slice(&reattach.data).unwrap();
+    assert_eq!(carried["child_credential"], fixture_credential(7));
     assert_eq!(reattach.input_seq_high_watermark, 3);
     assert!(reattach.pty_bytes >= 5);
     assert!(!reattach.replay_b64.is_empty());
@@ -385,6 +391,86 @@ async fn wrapper_actual_runtime_register_input_ack_reconnect_replay_and_dismiss(
     );
 }
 
+#[test]
+fn provider_credential_receiver() {
+    if std::env::var_os("SYNTHETIC_PROVIDER_CREDENTIAL_CHECK").is_none() {
+        return;
+    }
+    assert!(std::env::var("MANY_AI_CLI_HUB_TOKEN").as_deref() == Ok(&fixture_credential(8)));
+    assert!(std::env::var("MANY_AI_CLI_SESSION_ID").as_deref() == Ok("8"));
+    for name in [
+        "MANY_AI_CLI_LOCAL_PROOF",
+        "aNy_Ai_Cli_Hub_Token",
+        "ANY_AI_CLI_LOCAL_PROOF",
+    ] {
+        assert!(std::env::var_os(name).is_none());
+    }
+    std::fs::write("verified", b"ok").unwrap();
+}
+
+#[tokio::test]
+async fn provider_receives_only_the_registered_session_credential() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut launch = plan(temp.path());
+    launch.executable = std::env::current_exe().unwrap();
+    launch.args = ["--exact", "provider_credential_receiver"]
+        .map(Into::into)
+        .to_vec();
+    for name in [
+        "MANY_AI_CLI_HUB_TOKEN",
+        "aNy_Ai_Cli_Hub_Token",
+        "MANY_AI_CLI_LOCAL_PROOF",
+        "ANY_AI_CLI_LOCAL_PROOF",
+    ] {
+        launch
+            .env
+            .insert(name.into(), Some("synthetic-owner".into()));
+    }
+    launch.env.insert(
+        "SYNTHETIC_PROVIDER_CREDENTIAL_CHECK".into(),
+        Some("1".into()),
+    );
+    let (socket, tx, mut rx) = socket_pair();
+    let connector = ScriptConnector {
+        sockets: Mutex::new(VecDeque::from([socket])),
+        proofs: Arc::new(Mutex::new(vec![])),
+        alive: true,
+    };
+    let options = WrapperOptions::new(
+        Message {
+            provider: "synthetic".into(),
+            token: "synthetic-owner".into(),
+            ..Default::default()
+        },
+        launch,
+    );
+    let runner = tokio::spawn(async move {
+        runtime::run(
+            options,
+            &connector,
+            &many_ai_cli::process::pty::NativePtyFactory,
+            &Cancellation::default(),
+            |_, _| Ok(()),
+        )
+        .await
+    });
+    receive_type(&mut rx, "register").await;
+    tx.send(Message {
+        r#type: "registered".into(),
+        session_id: 8,
+        token: fixture_credential(8),
+        cols: 80,
+        rows: 24,
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let end = receive_type(&mut rx, "session_end").await;
+    assert_eq!(end.exit_code, 0);
+    assert!(runner.await.unwrap().is_ok());
+    assert!(temp.path().join("verified").is_file());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn wrapper_loopback_websocket_transmits_initial_proof_only_in_header() {
@@ -423,6 +509,7 @@ async fn wrapper_loopback_websocket_transmits_initial_proof_only_in_header() {
             let registered = Message {
                 r#type: "registered".into(),
                 session_id: 12,
+                token: fixture_credential(12),
                 ..Default::default()
             };
             socket
@@ -596,6 +683,7 @@ async fn wrapper_short_writes_complete_before_ack_and_duplicates_do_not_rewrite(
     tx.send(Message {
         r#type: "registered".into(),
         session_id: 1,
+        token: fixture_credential(1),
         ..Default::default()
     })
     .await
@@ -652,6 +740,7 @@ async fn wrapper_failed_write_never_acks_and_keeps_session_until_explicit_dismis
     tx.send(Message {
         r#type: "registered".into(),
         session_id: 1,
+        token: fixture_credential(1),
         ..Default::default()
     })
     .await
@@ -731,6 +820,7 @@ async fn wrapper_output_backpressure_reconnects_even_with_live_hub_auto_shutdown
         .send(Message {
             r#type: "registered".into(),
             session_id: 1,
+            token: fixture_credential(1),
             ..Default::default()
         })
         .await
@@ -814,7 +904,29 @@ async fn refused_or_zero_registration_ack_cannot_prepare_or_spawn_provider() {
             session_id: 0,
             ..Default::default()
         },
+        Message {
+            r#type: "registered".into(),
+            session_id: 12,
+            ..Default::default()
+        },
+        Message {
+            r#type: "registered".into(),
+            session_id: 12,
+            token: fixture_credential(13),
+            ..Default::default()
+        },
+        Message {
+            r#type: "registered".into(),
+            session_id: 12,
+            token: "synthetic-owner".into(),
+            ..Default::default()
+        },
     ] {
+        let expected = if response.r#type == "registered" && response.session_id > 0 {
+            io::ErrorKind::PermissionDenied
+        } else {
+            io::ErrorKind::InvalidData
+        };
         let root = tempfile::tempdir().unwrap();
         let (socket, tx, mut rx) = socket_pair();
         let proofs = Arc::new(Mutex::new(vec![]));
@@ -827,6 +939,7 @@ async fn refused_or_zero_registration_ack_cannot_prepare_or_spawn_provider() {
         let mut options = WrapperOptions::new(
             Message {
                 provider: "synthetic".into(),
+                token: "synthetic-owner".into(),
                 ..Default::default()
             },
             plan(root.path()),
@@ -849,7 +962,7 @@ async fn refused_or_zero_registration_ack_cannot_prepare_or_spawn_provider() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(result.unwrap_err().kind(), expected);
         assert_eq!(
             *trace.lock().unwrap(),
             vec![Some("single-attempt-synthetic".into())]
@@ -893,6 +1006,7 @@ async fn wrapper_explicit_hub_shutdown_keeps_provider_for_manual_restart() {
         .send(Message {
             r#type: "registered".into(),
             session_id: 1,
+            token: fixture_credential(1),
             ..Default::default()
         })
         .await
@@ -958,6 +1072,7 @@ async fn wrapper_failed_native_resize_does_not_interrupt_subsequent_input() {
     tx.send(Message {
         r#type: "registered".into(),
         session_id: 1,
+        token: fixture_credential(1),
         ..Default::default()
     })
     .await

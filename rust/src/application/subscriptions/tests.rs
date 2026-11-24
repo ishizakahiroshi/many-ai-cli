@@ -98,6 +98,42 @@ struct Fixture {
 fn fixture() -> Fixture {
     fixture_with_spawner(Arc::new(Boundary))
 }
+#[tokio::test]
+async fn profile_add_keeps_its_directory_for_required_local_policy_and_rechecks_it_at_launch() {
+    let f = fixture();
+    let home = f.service.home.join(".codex");
+    std::fs::create_dir(&home).unwrap();
+    std::fs::write(
+        home.join("config.toml"),
+        "[sandbox_workspace_write]\nnetwork_access=false\n",
+    )
+    .unwrap();
+    let list = f
+        .service
+        .add("codex", "test", "test")
+        .unwrap_or_else(|e| panic!("{}", e.detail));
+    let row = &list["providers"][1]["profiles"][0];
+    assert!(row["issue"].as_str().unwrap().contains("security policy"));
+    let folder = PathBuf::from(row["profile_dir"].as_str().unwrap());
+    let mut cfg = f.service.config.snapshot().unwrap().config;
+    cfg.subscriptions.get_mut("codex").unwrap()[0].settings_sync = Some(false);
+    std::fs::write(folder.join("config.toml"), "").unwrap();
+    assert!(
+        f.service
+            .launcher
+            .launch(&cfg, "codex", "test", &[])
+            .is_err()
+    );
+    std::fs::write(
+        folder.join("config.toml"),
+        "[sandbox_workspace_write]\nnetwork_access = false\n",
+    )
+    .unwrap();
+    f.service
+        .launcher
+        .launch(&cfg, "codex", "test", &[])
+        .unwrap();
+}
 fn fixture_with_spawner(spawner: Arc<dyn WrappedSessionSpawner>) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();

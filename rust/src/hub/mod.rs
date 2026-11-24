@@ -3,6 +3,7 @@
 //! must never be read as a claim that the application is implemented.
 pub mod assets;
 pub mod auth;
+pub(crate) mod child_token;
 pub mod http;
 pub mod network;
 pub mod pin;

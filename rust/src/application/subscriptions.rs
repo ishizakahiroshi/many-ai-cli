@@ -224,22 +224,49 @@ impl SubscriptionService {
                 Err(error) => return Err(save_error(error)),
             }
         };
-        if let Err(error) =
-            self.launcher
+        // A policy that needs provisioning is a usable registration: the
+        // person needs its stable directory to install the local policy.
+        // Every launch checks the policy again before returning a child env.
+        let setup =
+            match self
+                .launcher
                 .seed_existing_profile(provider, &reserved, &self.environment)
-        {
-            self.rollback_add(provider, &reserved);
-            return Err(ServiceError::new(
-                500,
-                "profile_dir_error",
-                format!("create profile dir: {error}"),
-            ));
-        }
+            {
+                Ok(_) => None,
+                Err(error)
+                    if error
+                        .get_ref()
+                        .and_then(|e| e.downcast_ref::<crate::profile::seed::SeedError>())
+                        == Some(&crate::profile::seed::SeedError::LocalPolicyRequired) =>
+                {
+                    Some(error.to_string())
+                }
+                Err(error) => {
+                    self.rollback_add(provider, &reserved);
+                    return Err(ServiceError::new(
+                        500,
+                        "profile_dir_error",
+                        format!("create profile dir: {error}"),
+                    ));
+                }
+            };
         if let Err(error) = self.persist_current() {
             self.rollback_add(provider, &reserved);
             return Err(error);
         }
-        self.list()
+        let mut list = self.list()?;
+        if let Some(reason) = setup
+            && let Some(row) = list["providers"]
+                .as_array_mut()
+                .into_iter()
+                .flatten()
+                .find(|group| group["provider"] == provider)
+                .and_then(|group| group["profiles"].as_array_mut())
+                .and_then(|rows| rows.iter_mut().find(|row| row["id"] == reserved.id))
+        {
+            row["issue"] = reason.into();
+        }
+        Ok(list)
     }
     fn rollback_add(&self, provider: &str, reserved: &SubscriptionProfile) {
         loop {

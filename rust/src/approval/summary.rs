@@ -424,12 +424,12 @@ static BEARER: LazyLock<Regex> =
 static SECRET: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)(?-u:\b)((?:api[_-]?key|token|secret|password|auth|private[_-]?key)(?-u:\s)*[:=](?-u:\s)*["']?)([^"'\t\n\f\r ,;]{6,})(["']?)"#).unwrap()
 });
-static KNOWN_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?-u:\b)(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9_-]{16,})",
-    )
+static KNOWN_TOKEN: LazyLock<Regex> =
+    LazyLock::new(|| {
+        Regex::new(&format!("{}|{}", crate::hub::child_token::REDACTION_PATTERN,
+        r"(?-u:\b)(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9_-]{16,})"))
     .unwrap()
-});
+    });
 pub fn mask_secrets(text: &str) -> String {
     let text = BEARER.replace_all(text, "${1}[REDACTED]");
     let text = SECRET.replace_all(&text, "${1}[REDACTED]${3}");

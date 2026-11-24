@@ -660,6 +660,23 @@ fn status(f: &Fixture, id: &str) -> proto::RelayStatus {
         .unwrap()
         .relay
 }
+#[tokio::test]
+async fn prior_launch_with_same_parent_number_cannot_be_listed_or_stopped() {
+    let f = fixture(6).await;
+    let initial = start(&f, "bound", false, false).await;
+    {
+        let mut state = lock(&f.program.state);
+        let meta = state.meta.get_mut(&initial.orchestration_id).unwrap();
+        meta.parent_identity.0 = "2000-01-01T00:00:00Z".into();
+    }
+    assert!(f.program.list(f.parent).unwrap().is_empty());
+    assert!(
+        f.program
+            .resolve(f.parent, &initial.orchestration_id, false)
+            .is_err()
+    );
+    assert!(f.program.resolve(f.parent, "", false).is_err());
+}
 
 #[tokio::test]
 async fn relay_runs_final_implementation_review_completion_and_persists() {

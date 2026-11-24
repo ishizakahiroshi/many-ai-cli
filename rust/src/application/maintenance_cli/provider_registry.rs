@@ -86,12 +86,11 @@ pub(super) fn hub_session_variables(
     inherited: impl IntoIterator<Item = std::ffi::OsString>,
 ) -> std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>> {
     let mut env = std::collections::BTreeMap::new();
-    for name in [
-        "MANY_AI_CLI_HUB_TOKEN",
-        "MANY_AI_CLI_HUB_PORT",
-        "MANY_AI_CLI_SESSION_ID",
-        "MANY_AI_CLI_LOCAL_PROOF",
-    ] {
+    for name in crate::wrapper::launch::SESSION_ENV
+        .iter()
+        .copied()
+        .chain(["MANY_AI_CLI_HUB_PORT"])
+    {
         env.insert(name.into(), None);
     }
     let from_entries = environment
@@ -105,7 +104,11 @@ pub(super) fn hub_session_variables(
         } else {
             text.starts_with(SESSION_VARIABLE_PREFIX)
         };
-        if matches {
+        if matches
+            || crate::wrapper::launch::SESSION_ENV
+                .iter()
+                .any(|known| text.eq_ignore_ascii_case(known))
+        {
             env.insert(name, None);
         }
     }

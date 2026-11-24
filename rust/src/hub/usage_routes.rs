@@ -17,9 +17,17 @@ impl UsageHttp {
         request: &Request,
         now: Timestamp,
     ) -> Option<Response> {
+        self.handle_scoped(request, now, None).await
+    }
+    pub(crate) async fn handle_scoped(
+        &self,
+        request: &Request,
+        now: Timestamp,
+        scoped: Option<crate::proto::core::SessionBinding>,
+    ) -> Option<Response> {
         if !is_route(&request.path) {
             return None;
         }
-        Some(self.owner.receive(request, now).await)
+        Some(self.owner.receive_scoped(request, now, scoped).await)
     }
 }

@@ -25,8 +25,8 @@ const LOCAL_COOKIE_TTL: i64 = 7 * 24 * 60 * 60;
 const MAX_LOCAL_MARKS: usize = 64;
 /// The header a CLI on this machine sends to show it read the private config.
 pub const LOCAL_PROOF_HEADER: &str = "X-Many-AI-CLI-Local";
-/// The environment variable that hands the CLI proof to the usage relay and
-/// `orchestrate`, next to `MANY_AI_CLI_HUB_TOKEN`.
+/// Legacy CLI-local proof transport. New providers receive a scoped session
+/// credential and do not need this Hub-wide proof.
 pub const LOCAL_PROOF_ENV: &str = "MANY_AI_CLI_LOCAL_PROOF";
 /// The proof a CLI on this machine presents with a PIN set. It is made from
 /// the cookie secret in the private config, which a token holder elsewhere

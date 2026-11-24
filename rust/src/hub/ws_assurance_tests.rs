@@ -352,6 +352,19 @@ async fn forged_wrapper_session_ids_cannot_redirect_output_ack_or_end_to_another
 async fn reattached_wrapper_rejects_stale_core_output_ack_and_disconnect_without_losing_queue() {
     let f = fixture().await;
     let (mut old, ack, old_binding) = register_wrapper(&f, 406).await;
+    let credential = ack["token"].as_str().expect("registration credential");
+    assert!(
+        f.services
+            .child_tokens
+            .valid(credential, "synthetic-websocket-token", old_binding)
+    );
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let private_data = STANDARD.encode(
+        serde_json::to_vec(&serde_json::json!({
+            "child_credential": credential
+        }))
+        .unwrap(),
+    );
     let mut ui = ui_client(&f).await;
     f.core.acknowledge(old_binding, InputSeq(0));
     ui.json(serde_json::json!({"type":"pty_input","session_id":old_binding.session.0,"text":"retained"}))
@@ -362,16 +375,28 @@ async fn reattached_wrapper_rejects_stale_core_output_ack_and_disconnect_without
         .json(
             serde_json::json!({"type":"reattach","session_id":old_binding.session.0,
             "provider":"shell","cwd":f._root.path(),"pid":406,
-            "started_at":ack["started_at"],"token":"synthetic-websocket-token"}),
+            "started_at":ack["started_at"],"token":"synthetic-websocket-token","data":private_data}),
         )
         .await;
-    assert_eq!(replacement.frame().await.unwrap()["type"], "reattach_ack");
+    let resumed = replacement.frame().await.unwrap();
+    assert_eq!(resumed["type"], "reattach_ack");
+    assert!(resumed["token"].as_str() == Some(credential));
     let replay = replacement.until("pty_input").await;
     assert_eq!(replay["input_seq"], original["input_seq"]);
     assert_eq!(replay["data"], original["data"]);
     assert!(old.frame().await.is_none());
     let current = f.core.details(old_binding.session).unwrap();
     assert_ne!(current.binding.wrapper, old_binding.wrapper);
+    assert!(f.services.child_tokens.valid(
+        credential,
+        "synthetic-websocket-token",
+        current.binding
+    ));
+    assert!(
+        !f.services
+            .child_tokens
+            .valid(credential, "synthetic-websocket-token", old_binding)
+    );
     assert!(matches!(
         f.core.observe_output(
             old_binding,

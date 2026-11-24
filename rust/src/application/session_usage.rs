@@ -47,6 +47,14 @@ impl SessionUsage {
         })
     }
     pub async fn receive(self: &Arc<Self>, request: &Request, now: Timestamp) -> Response {
+        self.receive_scoped(request, now, None).await
+    }
+    pub(crate) async fn receive_scoped(
+        self: &Arc<Self>,
+        request: &Request,
+        now: Timestamp,
+        scoped: Option<SessionBinding>,
+    ) -> Response {
         if let Err(error) = require_method(request, &["POST"]) {
             return error;
         }
@@ -54,12 +62,20 @@ impl SessionUsage {
             Ok(req) => req,
             Err(error) => return error,
         };
+        let refused =
+            || Response::error(401, "unauthorized", "session credential refused").no_store();
+        if scoped.is_some_and(|binding| binding.session.0 != req.session_id) {
+            return refused();
+        }
         if req.session_id <= 0 {
             return Response::error(400, "bad_request", "session_id required");
         }
         let Some(details) = self.core.details(LiveSessionId(req.session_id)) else {
             return Response::error(404, "not_found", "session not found");
         };
+        if scoped.is_some_and(|binding| binding != details.binding || !details.connected) {
+            return refused();
+        }
         if !req.provider.is_empty()
             && !details.snapshot.provider.is_empty()
             && req.provider != details.snapshot.provider

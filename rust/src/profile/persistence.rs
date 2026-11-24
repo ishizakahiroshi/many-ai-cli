@@ -20,20 +20,21 @@ pub fn seed_codex(
     profile: &Dir,
     options: &SyncOptions,
 ) -> io::Result<SeedReport> {
-    if !options.enabled {
-        match profile.metadata("config.toml") {
-            Ok(_) => {
-                return Ok(SeedReport {
-                    created: false,
-                    changed_keys: vec![],
-                    removed_temporary_hooks: 0,
-                });
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e),
+    let file = match std::fs::File::open(default_config) {
+        Ok(file) => file,
+        Err(e)
+            if e.kind() == io::ErrorKind::NotFound
+                && !options.enabled
+                && profile.metadata("config.toml").is_ok() =>
+        {
+            return Ok(SeedReport {
+                created: false,
+                changed_keys: vec![],
+                removed_temporary_hooks: 0,
+            });
         }
-    }
-    let file = std::fs::File::open(default_config)?;
+        Err(e) => return Err(e),
+    };
     if !file.metadata()?.is_file() {
         return Err(io::Error::other("default settings is not a regular file"));
     }

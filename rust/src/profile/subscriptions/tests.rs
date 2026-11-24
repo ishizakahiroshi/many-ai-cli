@@ -74,6 +74,9 @@ fn failed_selected_directory_does_not_advance_again_or_use_another_account() {
         "MANY_AI_CLI_SUBSCRIPTION_ID=second"
     );
 }
+// Claude's standard account settings filename, relative to the synthetic test home.
+const CLAUDE_STATE_FILE: &str = ".claude.json"; // doxguard: allow claude.json
+
 #[test]
 fn profile_seeds_only_named_settings_and_preserves_existing_state() {
     let (_root, paths, home, cfg) = fixture();
@@ -81,18 +84,18 @@ fn profile_seeds_only_named_settings_and_preserves_existing_state() {
     std::fs::create_dir(&defaults).unwrap();
     std::fs::write(
         defaults.join("settings.json"),
-        r#"{"theme":"default","permissions":{"allow":["Read"]},"new_setting":true}"#,
+        r#"{"theme":"dark","permissions":{"allow":["Read"]},"new_setting":true}"#,
     )
     .unwrap();
     std::fs::write(defaults.join("CLAUDE.md"), "synthetic rules").unwrap();
     std::fs::write(defaults.join("auth.json"), "SYNTHETIC_AUTH_DO_NOT_COPY").unwrap();
-    std::fs::write(home.join(".claude.json"), r#"{"claudeInChromeDefaultEnabled":true,"hasCompletedClaudeInChromeOnboarding":true,"oauthAccount":"SYNTHETIC_AUTH_DO_NOT_COPY","large":123456789012345678901234567890}"#).unwrap();
+    std::fs::write(home.join(CLAUDE_STATE_FILE), r#"{"claudeInChromeDefaultEnabled":true,"hasCompletedClaudeInChromeOnboarding":true,"oauthAccount":"SYNTHETIC_AUTH_DO_NOT_COPY","large":123456789012345678901234567890}"#).unwrap();
     let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into());
     let (_, notice) = launcher.launch(&cfg, "claude", "main", &[]).unwrap();
     assert!(notice.unwrap().applied.contains(&"settings.json".into()));
     let destination = paths.resource(Resource::Subscriptions).join("claude/main");
     assert!(!destination.join("auth.json").exists());
-    let state = std::fs::read_to_string(destination.join(".claude.json")).unwrap();
+    let state = std::fs::read_to_string(destination.join(CLAUDE_STATE_FILE)).unwrap();
     assert!(!state.contains("SYNTHETIC_AUTH_DO_NOT_COPY"));
     std::fs::write(
         destination.join("settings.json"),
@@ -106,8 +109,50 @@ fn profile_seeds_only_named_settings_and_preserves_existing_state() {
     assert_eq!(settings["profile_only"], 1);
     assert_eq!(
         settings["permissions"]["allow"],
-        serde_json::json!(["Read"])
+        serde_json::json!(["Read", "Write"])
     );
+}
+#[test]
+fn profile_seed_filters_mixed_settings_with_sync_on_and_off_and_preserves_local_credentials() {
+    for sync in [true, false] {
+        let (_root, paths, home, mut cfg) = fixture();
+        let selected = &mut cfg.subscriptions.get_mut("claude").unwrap()[0];
+        selected.settings_sync = Some(sync);
+        selected.default_wins_keys = vec!["env".into(), "theme".into()];
+        let default = home.join(".claude");
+        std::fs::create_dir(&default).unwrap();
+        let settings = default.join("settings.json");
+        std::fs::write(&settings, br#"{"theme":"dark","env":{"key":"synthetic-private"},"apiKeyHelper":"synthetic-private","voiceEnabled":{"key":"synthetic-private"},"model":"synthetic-private"}"#).unwrap();
+        std::fs::write(home.join(CLAUDE_STATE_FILE), br#"{"claudeInChromeDefaultEnabled":{"nested":"synthetic-private"},"hasCompletedClaudeInChromeOnboarding":true}"#).unwrap();
+        let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into());
+        launcher.launch(&cfg, "claude", "main", &[]).unwrap();
+        let dir = paths.resource(Resource::Subscriptions).join("claude/main");
+        let profile = dir.join("settings.json");
+        let initial: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&profile).unwrap()).unwrap();
+        assert_eq!(initial, serde_json::json!({"theme":"dark"}));
+        let state: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join(CLAUDE_STATE_FILE)).unwrap()).unwrap();
+        assert_eq!(
+            state,
+            serde_json::json!({"hasCompletedClaudeInChromeOnboarding": true})
+        );
+        std::fs::write(
+            &profile,
+            br#"{"theme":"dark","env":{"key":"profile-owned"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            &settings,
+            br#"{"theme":"light","env":{"key":"synthetic-private"}}"#,
+        )
+        .unwrap();
+        launcher.launch(&cfg, "claude", "main", &[]).unwrap();
+        let actual: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(profile).unwrap()).unwrap();
+        assert_eq!(actual["env"], serde_json::json!({"key":"profile-owned"}));
+        assert_eq!(actual["theme"], if sync { "light" } else { "dark" });
+    }
 }
 #[test]
 fn settings_sync_overrides_and_malformed_source_preserve_destination() {
@@ -116,30 +161,64 @@ fn settings_sync_overrides_and_malformed_source_preserve_destination() {
     std::fs::create_dir(&defaults).unwrap();
     std::fs::write(
         defaults.join("settings.json"),
-        r#"{"theme":"default","policy":2}"#,
+        r#"{"theme":"dark","alwaysThinkingEnabled":true}"#,
     )
     .unwrap();
     let profile = &mut cfg.subscriptions.get_mut("claude").unwrap()[0];
-    profile.profile_owned_keys = vec!["policy".into()];
+    profile.profile_owned_keys = vec!["alwaysThinkingEnabled".into()];
     profile.default_wins_keys = vec!["theme".into()];
     let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into());
     launcher.launch(&cfg, "claude", "main", &[]).unwrap();
     let destination = paths
         .resource(Resource::Subscriptions)
         .join("claude/main/settings.json");
-    std::fs::write(&destination, r#"{"theme":"profile","policy":1}"#).unwrap();
+    std::fs::write(
+        &destination,
+        r#"{"theme":"light","alwaysThinkingEnabled":false}"#,
+    )
+    .unwrap();
     launcher.launch(&cfg, "claude", "main", &[]).unwrap();
     let before = std::fs::read(&destination).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&before).unwrap();
-    assert_eq!(value["theme"], "default");
-    assert_eq!(value["policy"], 1);
+    assert_eq!(value["theme"], "dark");
+    assert_eq!(value["alwaysThinkingEnabled"], false);
     std::fs::write(defaults.join("settings.json"), "{malformed synthetic").unwrap();
-    let (_, notice) = launcher.launch(&cfg, "claude", "main", &[]).unwrap();
-    assert_eq!(notice.unwrap().failed, ["settings.json"]);
+    assert!(launcher.launch(&cfg, "claude", "main", &[]).is_err());
     assert_eq!(std::fs::read(destination).unwrap(), before);
 }
 #[test]
-fn codex_first_seed_keeps_user_hooks_and_never_copies_auth() {
+fn restrictive_profile_policy_is_preserved_or_prevents_launch_before_credentials_are_copied() {
+    let (_root, paths, home, cfg) = fixture();
+    let default = home.join(".claude");
+    std::fs::create_dir(&default).unwrap();
+    let settings = default.join("settings.json");
+    std::fs::write(&settings, br#"{"permissions":{"disableBypassPermissionsMode":"disable","deny":["Bash"],"allow":["synthetic-private"]},"sandbox":{"enabled":true,"allowUnsandboxedCommands":false}}"#).unwrap();
+    let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into());
+    launcher.launch(&cfg, "claude", "main", &[]).unwrap();
+    let dest = paths
+        .resource(Resource::Subscriptions)
+        .join("claude/main/settings.json");
+    let prior = std::fs::read_to_string(&dest).unwrap();
+    assert!(!prior.contains("synthetic-private"));
+    let policy: serde_json::Value = serde_json::from_str(&prior).unwrap();
+    assert_eq!(
+        policy["permissions"]["disableBypassPermissionsMode"],
+        "disable"
+    );
+    assert_eq!(policy["permissions"]["deny"], serde_json::json!(["Bash"]));
+    assert_eq!(policy["sandbox"]["enabled"], true);
+    launcher.launch(&cfg, "claude", "main", &[]).unwrap();
+    let local = br#"{"permissions":{"deny":["Bash(synthetic-sensitive-policy *)"]}}"#;
+    std::fs::write(&settings, local).unwrap();
+    let error = launcher.launch(&cfg, "claude", "main", &[]).unwrap_err();
+    assert!(!error.to_string().contains("synthetic-sensitive"));
+    assert_eq!(std::fs::read_to_string(&dest).unwrap(), prior);
+    assert!(launcher.launch(&cfg, "claude", "second", &[]).is_err());
+    std::fs::write(&dest, local).unwrap();
+    launcher.launch(&cfg, "claude", "main", &[]).unwrap();
+}
+#[test]
+fn codex_first_seed_keeps_preferences_and_skips_commands_and_auth() {
     let (_root, paths, home, mut cfg) = fixture();
     cfg.subscriptions
         .insert("codex".into(), vec![profile("main")]);
@@ -147,18 +226,16 @@ fn codex_first_seed_keeps_user_hooks_and_never_copies_auth() {
     std::fs::create_dir(&defaults).unwrap();
     std::fs::write(
         defaults.join("config.toml"),
-        "model = 'synthetic-model'\n[[hooks.Stop]]\ncommand = 'synthetic-user-hook'\n",
+        "model = 'gpt-5.1-codex'\n[[hooks.Stop]]\ncommand = 'synthetic-user-hook'\n",
     )
     .unwrap();
     std::fs::write(defaults.join("auth.json"), "SYNTHETIC_AUTH_DO_NOT_COPY").unwrap();
     let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into());
     launcher.launch(&cfg, "codex", "main", &[]).unwrap();
     let destination = paths.resource(Resource::Subscriptions).join("codex/main");
-    assert!(
-        std::fs::read_to_string(destination.join("config.toml"))
-            .unwrap()
-            .contains("synthetic-user-hook")
-    );
+    let config = std::fs::read_to_string(destination.join("config.toml")).unwrap();
+    assert!(config.contains("gpt-5.1-codex"));
+    assert!(!config.contains("synthetic-user-hook"));
     assert!(!destination.join("auth.json").exists());
 }
 type InstallCalls = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
@@ -318,7 +395,7 @@ fn open_code_only_changes_data_home_and_grok_seeds_policy() {
     std::fs::create_dir(&defaults).unwrap();
     std::fs::write(
         defaults.join("config.toml"),
-        "model = 'synthetic-default'\n[ui]\ncolor = 'blue'\n",
+        "model = 'grok-4.3' # synthetic-private-comment\n[ui]\ncolor = 'blue'\n",
     )
     .unwrap();
     std::fs::write(defaults.join("trusted_folders.toml"), "folders = []\n").unwrap();
@@ -328,7 +405,7 @@ fn open_code_only_changes_data_home_and_grok_seeds_policy() {
     assert!(notice.unwrap().applied.is_empty());
     launcher.launch(&cfg, "grok", "main", &[]).unwrap();
     let destination = paths.resource(Resource::Subscriptions).join("grok/main");
-    assert!(destination.join("trusted_folders.toml").exists());
+    assert!(!destination.join("trusted_folders.toml").exists());
     std::fs::write(
         destination.join("config.toml"),
         "model = 'synthetic-old'\n[ui]\ncolor = 'red'\n",
@@ -336,7 +413,8 @@ fn open_code_only_changes_data_home_and_grok_seeds_policy() {
     .unwrap();
     launcher.launch(&cfg, "grok", "main", &[]).unwrap();
     let value = std::fs::read_to_string(destination.join("config.toml")).unwrap();
-    assert!(value.contains("synthetic-default"));
+    assert!(value.contains("grok-4.3"));
+    assert!(!value.contains("synthetic-private-comment"));
     assert!(value.contains("red"));
 }
 #[cfg(unix)]
@@ -407,17 +485,9 @@ fn relative_subscription_tree_override_keeps_go_classification_before_absolutizi
         .resource(Resource::Subscriptions)
         .join("claude/source");
     std::fs::create_dir_all(&source).unwrap();
-    std::fs::write(
-        source.join("settings.json"),
-        r#"{"policy":"synthetic-relative-profile-source"}"#,
-    )
-    .unwrap();
+    std::fs::write(source.join("settings.json"), r#"{"theme":"dark"}"#).unwrap();
     std::fs::create_dir(home.join(".claude")).unwrap();
-    std::fs::write(
-        home.join(".claude/settings.json"),
-        r#"{"policy":"synthetic-default-source"}"#,
-    )
-    .unwrap();
+    std::fs::write(home.join(".claude/settings.json"), r#"{"theme":"light"}"#).unwrap();
     let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into());
     let env = vec!["CLAUDE_CONFIG_DIR=subscriptions/claude/source".into()];
     launcher.launch(&cfg, "claude", "main", &env).unwrap();
@@ -428,7 +498,7 @@ fn relative_subscription_tree_override_keeps_go_classification_before_absolutizi
                 .join("claude/main/settings.json")
         )
         .unwrap()
-        .contains("synthetic-relative-profile-source")
+        .contains("dark")
     );
 }
 #[test]

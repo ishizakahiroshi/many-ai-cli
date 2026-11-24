@@ -120,6 +120,14 @@ impl ChildControl {
         }
     }
     pub fn handle_authenticated(&self, request: &Request, now: Timestamp) -> Response {
+        self.handle_scoped(request, now, None)
+    }
+    pub(crate) fn handle_scoped(
+        &self,
+        request: &Request,
+        now: Timestamp,
+        scoped: Option<SessionBinding>,
+    ) -> Response {
         let path = request
             .path
             .trim_start_matches("/api/sessions/")
@@ -132,6 +140,15 @@ impl ChildControl {
             Ok(id) if id > 0 => LiveSessionId(id),
             _ => return Response::error(400, "bad_request", "invalid session id"),
         };
+        if scoped
+            .is_some_and(|b| b.session != id || !matches!(parts[1], "send-child" | "close-child"))
+        {
+            return Response::error(
+                403,
+                "forbidden",
+                "session operation is outside credential scope",
+            );
+        }
         let method = if parts[1] == "children" {
             "GET"
         } else {
@@ -141,7 +158,7 @@ impl ChildControl {
             return error;
         }
         match parts[1] {
-            "close-child" => self.close_child(request, id, now),
+            "close-child" => self.close_child(request, id, now, scoped),
             "children" => Response::json(
                 200,
                 &serde_json::json!({"ok":true,"children":self.core.snapshots().into_iter().filter(|child|child.parent_session_id==id).collect::<Vec<_>>()}),
@@ -197,7 +214,11 @@ impl ChildControl {
                 if body.text.trim().is_empty() {
                     return Response::error(400, "bad_request", "text is required");
                 }
-                let Some(parent) = self.core.details(id) else {
+                let Some(parent) = self
+                    .core
+                    .details(id)
+                    .filter(|p| scoped.is_none_or(|binding| binding == p.binding && p.connected))
+                else {
                     return Response::error(404, "not_found", "parent session not found");
                 };
                 if crate::profile::declared::is_acp(&parent.snapshot.provider) {
@@ -225,9 +246,11 @@ impl ChildControl {
                             )
                     })
                     .filter_map(|child| {
-                        self.core
-                            .details(child.id)
-                            .filter(|details| details.connected)
+                        self.core.details(child.id).filter(|details| {
+                            details.connected
+                                && (scoped.is_none()
+                                    || self.program.owns_scoped_child(&parent, details))
+                        })
                     })
                     .max_by_key(|details| details.binding.session);
                 let Some(child) = child else {
@@ -335,7 +358,13 @@ impl ChildControl {
             )),
         }
     }
-    fn close_child(&self, request: &Request, parent: LiveSessionId, now: Timestamp) -> Response {
+    fn close_child(
+        &self,
+        request: &Request,
+        parent: LiveSessionId,
+        now: Timestamp,
+        scoped: Option<SessionBinding>,
+    ) -> Response {
         let body: CloseRequest = match decode_json(request) {
             Ok(body) => body,
             Err(error) => return error,
@@ -349,7 +378,11 @@ impl ChildControl {
         let role = crate::orchestration::child_launch::safe_token(
             &crate::proto::unicode::simple_lower(body.role.trim()),
         );
-        let Some(parent_details) = self.core.details(parent) else {
+        let Some(parent_details) = self
+            .core
+            .details(parent)
+            .filter(|p| scoped.is_none_or(|binding| binding == p.binding && p.connected))
+        else {
             return Response::error(404, "not_found", "parent session not found");
         };
         let children: Vec<_> = self
@@ -357,6 +390,10 @@ impl ChildControl {
             .snapshots()
             .into_iter()
             .filter(|child| child.parent_session_id == parent)
+            .filter_map(|child| self.core.details(child.id))
+            .filter(|child| {
+                scoped.is_none() || self.program.owns_scoped_child(&parent_details, child)
+            })
             .collect();
         let missing = || {
             let current = children
@@ -364,7 +401,7 @@ impl ChildControl {
                 .map(|child| {
                     format!(
                         "role={} id={} state={}",
-                        child.role, child.id.0, child.state
+                        child.snapshot.role, child.binding.session.0, child.snapshot.state
                     )
                 })
                 .collect::<Vec<_>>()
@@ -377,8 +414,10 @@ impl ChildControl {
         };
         let Some(child) = children
             .iter()
-            .filter(|child| child.role == role && body.id.is_none_or(|id| child.id.0 == id))
-            .filter_map(|child| self.core.details(child.id))
+            .filter(|child| {
+                child.snapshot.role == role
+                    && body.id.is_none_or(|id| child.binding.session.0 == id)
+            })
             .max_by_key(|child| child.binding.session)
         else {
             return missing();
@@ -965,6 +1004,16 @@ mod tests {
             binding.session.0
         )));
         assert!(!notice.contains("closed from the dashboard"));
+    }
+    #[tokio::test]
+    async fn scoped_parent_must_own_the_registered_child_incarnation() {
+        let f = fixture().await;
+        let binding = child(&f, "worker", Timestamp::now()).await;
+        let child = f.core.details(binding.session).unwrap();
+        let mut parent = f.core.details(f.binding.session).unwrap();
+        assert!(f.control.program.owns_scoped_child(&parent, &child));
+        parent.binding.incarnation.0 += 1;
+        assert!(!f.control.program.owns_scoped_child(&parent, &child));
     }
 
     #[tokio::test]

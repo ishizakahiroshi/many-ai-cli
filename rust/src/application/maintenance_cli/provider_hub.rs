@@ -131,12 +131,10 @@ fn environment_value<'a>(environment: &'a [String], name: &str) -> Option<&'a st
     })
 }
 
-/// A Hub this CLI may talk to, or `None` when none runs. The session's own
-/// `MANY_AI_CLI_HUB_PORT` / `MANY_AI_CLI_HUB_TOKEN` come first (an AI that runs
-/// inside a Hub session); otherwise the port and token in the many-ai-cli
-/// config, but only for a listener this OS user holds. A Hub that answers but
-/// refuses the credentials is an error, not "no Hub": writing `providers.d`
-/// behind a running Hub would leave it stale.
+/// Discover the current user's Hub from an operator terminal. Explicit Hub
+/// credentials take precedence over the private config. Session callers and
+/// rejected credentials return errors so callers cannot edit `providers.d`
+/// behind the Hub.
 pub async fn discover(
     environment: &[String],
     config: &Config,
@@ -167,7 +165,18 @@ async fn discover_with(
     paths: &RuntimePaths,
     listener_is_own: impl Fn(u16) -> io::Result<bool>,
 ) -> io::Result<Option<NativeHub>> {
-    let from_session = environment_value(environment, "MANY_AI_CLI_HUB_PORT")
+    // A provider command launched inside a session cannot use the owner's
+    // config or fall back to changing providers.d when the Hub is offline.
+    if environment_value(environment, "MANY_AI_CLI_SESSION_ID").is_some()
+        || environment_value(environment, crate::wrapper::launch::HUB_TOKEN_ENV)
+            .is_some_and(crate::hub::child_token::is_child)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Manage providers from the dashboard or a terminal outside a Hub session",
+        ));
+    }
+    let from_environment = environment_value(environment, "MANY_AI_CLI_HUB_PORT")
         .and_then(|port| port.trim().parse::<u16>().ok())
         .filter(|port| *port > 0)
         .zip(
@@ -176,7 +185,7 @@ async fn discover_with(
                 .filter(|token| !token.is_empty()),
         );
     let proof = crate::hub::pin::cli_local_proof(config);
-    let hub = if let Some((port, token)) = from_session {
+    let hub = if let Some((port, token)) = from_environment {
         if paths.is_trial() && port != paths.port() {
             return Ok(None);
         }
@@ -211,7 +220,7 @@ async fn discover_with(
     match hub.call("GET", "/api/providers", None).await {
         Ok(reply) if reply.status == 200 => Ok(Some(hub)),
         Ok(reply) => Err(io::Error::other(format!(
-            "a Hub is running but refused this request ({}); not changing providers.d behind it. Restart the Hub or run from a Hub session",
+            "The running Hub refused this request ({}). Use the dashboard or verify the Hub credentials in your terminal.",
             reply.reason()
         ))),
         Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => Ok(None),
@@ -259,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn session_environment_wins_and_is_read_case_insensitively_on_windows() {
+    fn environment_credentials_are_read_case_insensitively_on_windows() {
         let environment = vec![
             "MANY_AI_CLI_HUB_PORT=49000".to_owned(),
             "MANY_AI_CLI_HUB_TOKEN=synthetic-token".to_owned(),
@@ -292,6 +301,23 @@ mod tests {
             !request.starts_with("get /api/providers?"),
             "the token must not be in the URL"
         );
+    }
+
+    #[tokio::test]
+    async fn session_provider_command_does_not_fall_back_to_owner_config_or_local_writes() {
+        let (_temp, paths) = trial();
+        let config = Config {
+            token: "synthetic-owner".into(),
+            ..Default::default()
+        };
+        let environment = vec!["MANY_AI_CLI_SESSION_ID=3".into()];
+        let error = discover_with(&environment, &config, &paths, |_| {
+            panic!("unexpected probe")
+        })
+        .await
+        .err()
+        .expect("a session cannot manage providers");
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     }
     #[tokio::test]
     async fn refused_credentials_are_an_error_and_a_dead_port_means_no_hub() {
@@ -337,7 +363,7 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn session_token_is_not_sent_to_a_listener_another_user_holds() {
+    async fn owner_token_is_not_sent_to_a_listener_another_user_holds() {
         let (_temp, paths) = trial();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();

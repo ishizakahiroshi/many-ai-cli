@@ -155,6 +155,16 @@ impl ChildHttp {
         waiter: &HttpWaitCancellation,
         at: Timestamp,
     ) -> Response {
+        self.spawn_scoped(request, ui, waiter, at, None).await
+    }
+    pub(crate) async fn spawn_scoped(
+        &self,
+        request: &Request,
+        ui: Option<VerifiedUiOrigin>,
+        waiter: &HttpWaitCancellation,
+        at: Timestamp,
+        scoped: Option<SessionBinding>,
+    ) -> Response {
         let parent = match super::confirmations::parent_path(&request.path) {
             Ok(id) => LiveSessionId(id),
             Err(error) => return error,
@@ -175,7 +185,9 @@ impl ChildHttp {
             Ok(role) => role,
             Err(error) => return Response::error(400, "bad_request", error),
         };
-        let Some(parent) = self.core.details(parent) else {
+        let Some(parent) = self.core.details(parent).filter(|details| {
+            scoped.is_none_or(|binding| binding == details.binding && details.connected)
+        }) else {
             return Response::error(404, "not_found", "parent session not found");
         };
         let requested_provider = body.provider.clone();

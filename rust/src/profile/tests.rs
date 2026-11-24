@@ -1,11 +1,13 @@
 use super::seed::*;
 use super::{registry, validation};
-const DEFAULT: &str = r#"model = "user-model"
+const DEFAULT: &str = r#"model = "gpt-5.1-codex" # synthetic-inline-note
+# synthetic-leading-note
 approval_policy = "on-request"
 [projects."/synthetic/project"]
 trust_level = "trusted"
 [mcp_servers.demo]
 command = "custom-tool"
+http_headers = { Authorization = "synthetic-private" }
 args = ["--old", "日本語"]
 [[hooks.Stop]]
 command = "echo user-hook"
@@ -15,18 +17,14 @@ command = "MANY_AI_CLI_HUB_TOKEN=synthetic '/synthetic/many ai cli' usage-relay 
 command = "echo user-start"
 "#;
 #[test]
-fn profile_absent_codex_preserves_user_settings_and_hooks_only_omits_owned_temp() {
+fn profile_absent_codex_seeds_only_validated_scalars_and_discards_source_comments() {
     let result = merge_codex(DEFAULT, None, &SyncOptions::default()).unwrap();
     assert!(result.created);
     assert_eq!(result.removed_temporary_hooks, 1);
-    assert!(result.text.contains("user-model"));
-    assert!(result.text.contains("user-hook"));
-    assert!(result.text.contains("user-start"));
-    assert!(result.text.contains("trust_level"));
-    assert!(result.text.contains("日本語"));
-    assert!(!result.text.contains("MANY_AI_CLI_HUB_TOKEN"));
-    assert!(!result.text.contains("usage-relay"));
-    assert!(!result.text.contains("auth.json"));
+    assert_eq!(
+        result.text,
+        "model = \"gpt-5.1-codex\"\napproval_policy = \"on-request\"\n"
+    );
 }
 #[test]
 fn profile_existing_codex_owned_state_hooks_and_profile_only_keys_survive() {
@@ -36,12 +34,12 @@ fn profile_existing_codex_owned_state_hooks_and_profile_only_keys_survive() {
     assert!(result.text.contains("profile-model"));
     assert!(result.text.contains("profile-hook"));
     assert!(!result.text.contains("user-hook"));
-    assert!(!result.text.contains("user-model"));
+    assert!(!result.text.contains("gpt-5.1-codex"));
     assert!(result.text.contains("on-request"));
     assert!(result.text.contains("profile_only"));
 }
 #[test]
-fn profile_default_wins_hooks_still_filters_temporary_session_references() {
+fn profile_default_wins_cannot_authorize_freeform_commands() {
     let opts = SyncOptions {
         default_wins_keys: vec!["hooks".into()],
         ..Default::default()
@@ -52,26 +50,72 @@ fn profile_default_wins_hooks_still_filters_temporary_session_references() {
         &opts,
     )
     .unwrap();
-    assert!(result.text.contains("user-hook"));
-    assert!(!result.text.contains("profile-hook"));
+    assert!(!result.text.contains("user-hook"));
+    assert!(result.text.contains("profile-hook"));
     assert!(!result.text.contains("MANY_AI_CLI_HUB_TOKEN"));
 }
 #[test]
-fn profile_replaced_policy_tables_remove_deleted_nested_keys() {
+fn profile_keeps_its_own_mcp_servers() {
     let result = merge_codex(
         "[mcp_servers.demo]\ncommand='new'\n",
         Some("[mcp_servers.demo]\ncommand='old'\nobsolete='remove'\n[profile_only]\nkeep=true\n"),
         &SyncOptions::default(),
     )
     .unwrap();
-    assert!(result.text.contains("new"));
-    assert!(!result.text.contains("obsolete"));
+    assert!(!result.text.contains("new"));
+    assert!(result.text.contains("obsolete"));
     assert!(result.text.contains("profile_only"));
 }
 #[test]
+fn profile_cannot_silently_drop_sandbox_constraints() {
+    let options = SyncOptions::default();
+    let policy =
+        "sandbox_mode='workspace-write'\n[sandbox_workspace_write]\nnetwork_access=false\n";
+    assert!(matches!(
+        merge_codex(policy, None, &options),
+        Err(SeedError::LocalPolicyRequired)
+    ));
+    assert!(matches!(
+        merge_codex(policy, Some("sandbox_mode='workspace-write'"), &options),
+        Err(SeedError::LocalPolicyRequired)
+    ));
+    let existing = "[sandbox_workspace_write]\nnetwork_access = false # profile-local\n";
+    let result = merge_codex(policy, Some(existing), &options).unwrap();
+    assert!(result.text.contains("workspace-write"));
+    assert!(result.text.contains("# profile-local"));
+    let normalized = merge_codex(
+        "[windows]\nsandbox='elevated' # private-comment\n",
+        None,
+        &options,
+    )
+    .unwrap();
+    assert!(normalized.text.contains("elevated"));
+    assert!(!normalized.text.contains("private-comment"));
+    let existing = "windows = {sandbox='unelevated', local_only='synthetic-local'}";
+    let default_windows = SyncOptions {
+        default_wins_keys: vec!["windows".into()],
+        ..Default::default()
+    };
+    let merged = merge_codex(&normalized.text, Some(existing), &default_windows).unwrap();
+    assert!(merged.text.contains("synthetic-local"));
+    assert!(!merged.text.contains("unelevated"));
+    let sync_off = SyncOptions {
+        enabled: false,
+        ..options
+    };
+    let unchanged = merge_codex(&normalized.text, Some(&merged.text), &sync_off).unwrap();
+    assert_eq!(unchanged.text, merged.text);
+}
+#[test]
 fn profile_comments_and_key_order_do_not_cause_rewrite() {
-    let existing = "# profile comments\nb = 2\na = 1\n";
-    let result = merge_codex("a=1\nb=2\n", Some(existing), &SyncOptions::default()).unwrap();
+    let existing =
+        "# profile comments\nhide_agent_reasoning = false\napproval_policy = 'on-request'\n";
+    let result = merge_codex(
+        "approval_policy = 'on-request'\nhide_agent_reasoning=false\n",
+        Some(existing),
+        &SyncOptions::default(),
+    )
+    .unwrap();
     assert!(result.changed_keys.is_empty());
     assert_eq!(result.text, existing);
 }
@@ -94,13 +138,14 @@ fn profile_sync_off_existing_is_unchanged_and_absent_is_safe() {
         enabled: false,
         ..Default::default()
     };
-    let existing = "model = 'owned'\n";
+    let existing = "model = 'owned'\napproval_policy = 'on-request'\n";
     assert_eq!(
         merge_codex(DEFAULT, Some(existing), &options).unwrap().text,
         existing
     );
     let new = merge_codex(DEFAULT, None, &options).unwrap();
-    assert!(new.text.contains("user-hook"));
+    assert!(new.text.contains("gpt-5.1-codex"));
+    assert!(!new.text.contains("user-hook"));
     assert!(!new.text.contains("MANY_AI_CLI_HUB_TOKEN"));
 }
 #[test]
@@ -110,9 +155,9 @@ fn profile_omits_the_owned_hook_in_its_current_form_without_a_token() {
     let text = "[[hooks.Stop]]\ncommand = \"echo user-hook\"\n[[hooks.Stop]]\ncommand = \"'/synthetic/many ai cli' usage-relay --provider codex --hub http://127.0.0.1:48888 --session 1\"\n";
     let result = merge_codex(text, None, &SyncOptions::default()).unwrap();
     assert_eq!(result.removed_temporary_hooks, 1);
-    assert!(result.text.contains("user-hook"));
+    assert!(!result.text.contains("user-hook"));
     assert!(!result.text.contains("usage-relay"));
-    // A user's own command that only resembles it is kept.
+    // A user's own command is not counted as a generated hook.
     let user = "[[hooks.Stop]]\ncommand = \"/usr/bin/many-ai-cli usage-relay --provider codex --hub http://127.0.0.1:48888 --session 1\"\n";
     assert_eq!(
         merge_codex(user, None, &SyncOptions::default())
@@ -122,11 +167,11 @@ fn profile_omits_the_owned_hook_in_its_current_form_without_a_token() {
     );
 }
 #[test]
-fn profile_similar_user_commands_are_not_discarded() {
+fn profile_similar_user_commands_are_neither_copied_nor_counted_as_generated() {
     let text = "[[hooks.Stop]]\ncommand = \"echo MANY_AI_CLI_HUB_TOKEN=user usage-relay --provider codex\"\n";
     let result = merge_codex(text, None, &SyncOptions::default()).unwrap();
     assert_eq!(result.removed_temporary_hooks, 0);
-    assert_eq!(result.text, text);
+    assert!(result.text.is_empty());
 }
 
 #[test]
@@ -238,7 +283,8 @@ fn profile_real_seed_creates_private_file_and_never_copies_credentials() {
     assert!(report.created);
     assert_eq!(report.removed_temporary_hooks, 1);
     let text = std::fs::read_to_string(profile.join("config.toml")).unwrap();
-    assert!(text.contains("user-hook"));
+    assert!(text.contains("gpt-5.1-codex"));
+    assert!(!text.contains("user-hook"));
     assert!(!text.contains("MANY_AI_CLI_HUB_TOKEN"));
     assert!(!profile.join("auth.json").exists());
     assert_eq!(
@@ -304,17 +350,16 @@ fn profile_malformed_existing_never_truncates_or_overwrites() {
 }
 
 #[test]
-fn profile_sync_off_does_not_parse_existing_or_require_default() {
+fn profile_sync_off_validates_present_default_and_accepts_an_absent_one() {
     let options = SyncOptions {
         enabled: false,
         ..Default::default()
     };
-    assert_eq!(
-        merge_codex("also invalid", Some("malformed = ["), &options)
-            .unwrap()
-            .text,
-        "malformed = ["
-    );
+    assert!(merge_codex("also invalid", Some("malformed = ["), &options).is_err());
+    assert!(matches!(
+        merge_codex("sandbox_mode='read-only'", Some(""), &options),
+        Err(SeedError::LocalPolicyRequired)
+    ));
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("config.toml"), "malformed = [").unwrap();
     let report = super::persistence::seed_codex(

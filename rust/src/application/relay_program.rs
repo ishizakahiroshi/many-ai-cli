@@ -144,6 +144,41 @@ pub struct RelayDependencies {
     pub tasks: HubTaskHandle,
     pub warning: EventWarning,
 }
+#[derive(Clone, Copy)]
+pub struct RelayParent {
+    session: LiveSessionId,
+    binding: Option<SessionBinding>,
+}
+impl From<LiveSessionId> for RelayParent {
+    fn from(session: LiveSessionId) -> Self {
+        Self {
+            session,
+            binding: None,
+        }
+    }
+}
+impl From<SessionBinding> for RelayParent {
+    fn from(binding: SessionBinding) -> Self {
+        Self {
+            session: binding.session,
+            binding: Some(binding),
+        }
+    }
+}
+impl RelayParent {
+    fn details(self, core: &SessionEngine) -> Result<SessionDetails, RelayError> {
+        core.details(self.session)
+            .filter(|p| self.binding.is_none_or(|b| p.connected && b == p.binding))
+            .ok_or_else(RelayError::parent)
+    }
+    fn owns(self, meta: &Meta, details: Option<&SessionDetails>) -> bool {
+        meta.attached
+            && meta.parent == self.session.0
+            && self
+                .binding
+                .is_none_or(|_| details.is_some_and(|p| meta.same_launch(p)))
+    }
+}
 struct Meta {
     sequence: u64,
     parent: i64,
@@ -153,6 +188,14 @@ struct Meta {
     child_labels: Vec<(String, String)>,
     board_path: String,
     item: RelayItem,
+}
+impl Meta {
+    fn same_launch(&self, parent: &SessionDetails) -> bool {
+        !self.parent_identity.0.is_empty()
+            && self.parent_identity.0 == parent.snapshot.started_at
+            && self.parent_identity.1 == parent.snapshot.cwd
+            && self.parent_identity.2 == parent.snapshot.provider
+    }
 }
 #[derive(Default)]
 struct State {
@@ -451,30 +494,35 @@ impl RelayProgram {
             parent,
         })
     }
-    pub fn list(&self, parent: LiveSessionId) -> Result<Vec<RelayItem>, RelayError> {
-        if self.core()?.details(parent).is_none() {
-            return Err(RelayError::parent());
-        }
+    pub fn list(&self, parent: impl Into<RelayParent>) -> Result<Vec<RelayItem>, RelayError> {
+        let actor = parent.into();
+        let details = actor.details(self.core()?.as_ref())?;
         let state = lock(&self.state);
         let mut items = state
             .meta
             .values()
-            .filter(|m| m.attached && m.parent == parent.0)
+            .filter(|m| actor.owns(m, Some(&details)))
             .collect::<Vec<_>>();
         items.sort_by_key(|m| m.sequence);
         Ok(items.into_iter().map(|m| m.item.clone()).collect())
     }
     fn resolve(
         &self,
-        parent: LiveSessionId,
+        parent: impl Into<RelayParent>,
         id: &str,
         resume: bool,
     ) -> Result<Arc<AsyncMutex<Run>>, RelayError> {
+        let actor = parent.into();
+        let details = actor
+            .binding
+            .map(|_| actor.details(self.core()?.as_ref()))
+            .transpose()?;
+        let attached = |meta: &Meta| actor.owns(meta, details.as_ref());
         let state = lock(&self.state);
         let id = id.trim();
         if !id.is_empty() {
             let meta = state.meta.get(id).ok_or_else(RelayError::missing)?;
-            if !resume && (!meta.attached || meta.parent != parent.0) {
+            if !resume && !attached(meta) {
                 return Err(RelayError::missing());
             }
             return state.runs.get(id).cloned().ok_or_else(RelayError::missing);
@@ -482,7 +530,7 @@ impl RelayProgram {
         let mut selected = state
             .meta
             .iter()
-            .filter(|(_, m)| m.attached && m.parent == parent.0)
+            .filter(|(_, m)| attached(m))
             .filter(|(_, m)| {
                 if resume {
                     m.item.relay.state == "stopped"
@@ -502,8 +550,7 @@ impl RelayProgram {
                 .meta
                 .iter()
                 .filter(|(_, meta)| {
-                    meta.attached
-                        && meta.parent == parent.0
+                    attached(meta)
                         && !matches!(meta.item.relay.state.as_str(), "completed" | "stopped")
                 })
                 .map(|(id, _)| id.as_str())
@@ -551,13 +598,14 @@ impl RelayProgram {
     }
     pub async fn start_relay(
         &self,
-        parent: LiveSessionId,
+        parent: impl Into<RelayParent>,
         mut request: RelayStartRequest,
         now: Timestamp,
         cancel: TaskCancellation,
     ) -> Result<(proto::RelayStatus, String), RelayError> {
         let core = self.core()?;
-        let parent = core.details(parent).ok_or_else(RelayError::parent)?;
+        let actor = parent.into();
+        let parent = actor.details(&core)?;
         let plan = self
             .git
             .resolve_plan(Path::new(&parent.snapshot.cwd), &request.plan_path, &cancel)
@@ -586,7 +634,7 @@ impl RelayProgram {
             state
                 .meta
                 .values()
-                .filter(|m| m.attached && m.parent == parent.binding.session.0)
+                .filter(|m| actor.owns(m, Some(&parent)))
                 .min_by_key(|m| m.sequence)
                 .and_then(|m| state.runs.get(&m.item.relay.orchestration_id))
                 .cloned()
@@ -927,7 +975,7 @@ impl RelayProgram {
     }
     pub async fn stop_relay(
         &self,
-        parent: LiveSessionId,
+        parent: impl Into<RelayParent>,
         id: &str,
         now: Timestamp,
     ) -> Result<proto::RelayStatus, RelayError> {

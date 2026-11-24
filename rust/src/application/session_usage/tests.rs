@@ -394,9 +394,21 @@ async fn claude_conversation_owned_by_another_live_session_is_not_adopted() {
         .binding;
     let path = claude_project_dir(&root, &core, first).join(format!("{RESUMED}.jsonl"));
     let body = serde_json::json!({"provider":"claude","tokens_in":-1,"transcript_path":path});
-    owner.receive(&request(first, body.clone()), now()).await;
+    owner
+        .receive_scoped(&request(first, body.clone()), now(), Some(first))
+        .await;
     assert_eq!(agent_id(&core, first), RESUMED);
-    owner.receive(&request(second, body), now()).await;
+    assert_eq!(
+        owner
+            .receive_scoped(&request(second, body.clone()), now(), Some(first))
+            .await
+            .status,
+        401
+    );
+    assert_eq!(agent_id(&core, second), "");
+    owner
+        .receive_scoped(&request(second, body), now(), Some(second))
+        .await;
     assert_eq!(agent_id(&core, second), "");
     assert_eq!(agent_id(&core, first), RESUMED);
 }
@@ -407,7 +419,7 @@ async fn http_abandonment_retains_profile_then_ui_order_and_usage_never_persists
         b,
         serde_json::json!({"provider":"codex","tokens_in":1000,"tokens_cache":250,"tokens_out":100,"usage_observed_at":"2026-10-05T01:02:03Z","prompt":"PRIVATE_BODY","data":"PRIVATE_BODY"}),
     );
-    let operation = tokio::spawn(async move { owner.receive(&req, now()).await });
+    let operation = tokio::spawn(async move { owner.receive_scoped(&req, now(), Some(b)).await });
     bounded(io.entered.acquire()).await.unwrap().forget();
     assert!(io.messages.lock().unwrap().is_empty());
     operation.abort();

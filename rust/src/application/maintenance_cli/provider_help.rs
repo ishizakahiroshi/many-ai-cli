@@ -16,10 +16,10 @@ USAGE
   many-ai-cli provider reset --distributed <id> --expected-revision <r> built-in back to shipped
   many-ai-cli provider recover <id> [revision|--list]                   recover a broken definition
 
-If a Hub is running (inside a Hub session, or started by this user), add / remove / restore / reset /
-recover go through it: it validates, keeps a backup, reloads, and tells every open dashboard. With no
-Hub they edit the provider files directly and the Hub reads them on its next start. Nothing here
-prints the Hub token.
+Manage providers from the dashboard or a terminal outside a Hub session. From that terminal,
+add / remove / restore / reset / recover go through the running Hub, which validates the change,
+keeps a backup, reloads, and tells every open dashboard. With no Hub running, these commands edit
+the provider files directly and the Hub reads them on its next start.
 
 Adding a CLI as an AI agent: read `many-ai-cli provider add --help` first.
 ";
@@ -65,6 +65,8 @@ OPTIONS
   A value that starts with '-' is fine: --arg --interactive, --headless-arg -p.
 
 IF YOU ARE AN AI AGENT ASKED TO ADD A NEW CLI
+  Inside a Hub session, prepare the definition and give the user the registration command to run
+  from an operator terminal outside the session.
   Do not guess. Find these in the CLI's own --help and official documentation, and show the user
   what you found before you register it. For every item say where it came from (the official
   documentation page, the CLI's --help, or \"not found, so not set\"). A value you could not

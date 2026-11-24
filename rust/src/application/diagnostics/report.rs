@@ -6,6 +6,7 @@ const SECRET: &str = "<REDACTED_SECRET>";
 fn patterns() -> &'static Vec<(Regex, &'static str)> {
     static CACHE: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     CACHE.get_or_init(||vec![
+ (crate::hub::child_token::REDACTION_PATTERN,SECRET),
  (r#"(?i)[a-z]:[\\/]+dev[\\/]+(?:kb|\.ssh|github[\\/]+private)(?:[\\/]+[^\s"'<>|]*)?"#,"<REDACTED_PRIVATE_PATH>"),
  (r#"(?i)/(?:srv/)?dev/(?:kb|\.ssh|github/private)(?:/[^\s"'<>|]*)?"#,"<REDACTED_PRIVATE_PATH>"),
  (r"(?i)[a-z]:[\\/]+users[\\/]+[^\\/\s]+[\\/]+","~/"),(r"/(?:home|Users)/[^/\s]+/","~/"),

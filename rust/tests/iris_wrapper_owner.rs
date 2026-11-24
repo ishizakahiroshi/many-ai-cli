@@ -76,6 +76,7 @@ impl HubSocket for Socket {
                 return Ok(Message {
                     r#type: "registered".into(),
                     session_id: 71,
+                    token: format!("child-v1.71.{}.{}", "a".repeat(64), "b".repeat(64)),
                     cols: 80,
                     rows: 24,
                     ..Default::default()

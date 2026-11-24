@@ -6,7 +6,7 @@
 //! a revision or a backup, recover) also needs the dashboard's proof
 //! (`VerifiedUiOrigin`: the signed UI cookie, Fetch Metadata and Origin). The
 //! Hub itself runs a built-in's launch and version commands (`cli_version`), so
-//! a caller that holds only the Hub token (any program inside a session) must
+//! a caller that holds only the Hub administrator token must
 //! not be able to point them at another executable. Registered (not built-in)
 //! ids keep their token-only routes. A built-in's icon image
 //! (`icon_routes`) is a separate store that is only shown, never run, so it

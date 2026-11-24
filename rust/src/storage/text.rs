@@ -4,6 +4,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 static SECRETS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     [
+    crate::hub::child_token::REDACTION_PATTERN,
     r"(?i)([A-Z_]*API_KEY=)[^\t\n\f\r ]+",
     r#"(?i)((?:[A-Z0-9]+_)?(?:PASSWORD|PASSWD|PWD|SECRET|ACCESS_KEY|SECRET_KEY|AUTH_TOKEN|API_TOKEN|ACCESS_TOKEN)(?:\\?["'])?[\t\n\f\r ]*[=:][\t\n\f\r ]*(?:\\?["'])?)[^\t\n\f\r ]{6,}"#,
     r"sk-(?:ant-)?[A-Za-z0-9_\-]{20,}", r"xai-[A-Za-z0-9_\-]{20,}", r"gsk_[A-Za-z0-9_\-]{20,}",

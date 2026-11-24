@@ -21,11 +21,32 @@ pub fn request_token(request: &Request) -> String {
     if !query.is_empty() {
         return query;
     }
-    let auth = request.header("Authorization").trim();
-    if let Some(value) = auth.strip_prefix("Bearer ") {
-        return value.trim().into();
+    bearer(request).into()
+}
+pub(crate) fn bearer(request: &Request) -> &str {
+    bearer_value(request.header("Authorization"))
+}
+fn bearer_value(header: &str) -> &str {
+    let Some((scheme, token)) = header.trim().split_once(' ') else {
+        return "";
+    };
+    let token = token.trim();
+    // Preserve the master-token wire convention. Reserve scoped bearers for
+    // every HTTP spelling so they cannot fall through to trusted-source auth.
+    if scheme == "Bearer"
+        || (scheme.eq_ignore_ascii_case("Bearer") && super::child_token::is_child(token))
+    {
+        token
+    } else {
+        ""
     }
-    String::new()
+}
+pub(crate) fn presents_child_token(request: &Request) -> bool {
+    request.headers.iter().any(|(name, value)| {
+        name.eq_ignore_ascii_case("Authorization")
+            && super::child_token::is_child(bearer_value(value))
+    }) || url::form_urlencoded::parse(request.query.as_bytes())
+        .any(|(key, value)| key == "token" && super::child_token::is_child(&value))
 }
 
 /// How long an asset ticket lasts. The dashboard renews it every hour.
@@ -288,6 +309,9 @@ fn trusted_remote(remote: &str, networks: &[String]) -> bool {
     })
 }
 pub fn token_or_trusted(request: &Request, config: &Config) -> bool {
+    if presents_child_token(request) {
+        return false;
+    }
     valid_token(&request_token(request), &config.token)
         || asset_ticket_ok(request, config)
         || (config.hub.allow_loopback_without_token
@@ -335,6 +359,14 @@ pub fn guard_base(
     if !token_or_trusted(request, config) {
         return Err(Response::error(401, "unauthorized", "unauthorized"));
     }
+    guard_shape(request, config, port, methods)
+}
+pub(crate) fn guard_shape(
+    request: &Request,
+    config: &Config,
+    port: i64,
+    methods: &[&str],
+) -> Result<(), Response> {
     require_method(request, methods)?;
     require_host(request, config, port)?;
     if !matches!(request.method.as_str(), "GET" | "HEAD" | "OPTIONS") {
