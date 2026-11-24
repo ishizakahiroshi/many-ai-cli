@@ -2209,6 +2209,7 @@
   "relay_plan_required": "Hãy chọn hoặc nhập một tệp plan.",
   "relay_error_capacity": "Không đọc được giới hạn relay. Hãy thử lại.",
   "relay_error_session_missing": "Session được chọn không còn tồn tại.",
+  "orchestration_cross_session_refuse_note": "Các session con của conductor và relay khởi động với thiết lập từ chối tin nhắn từ các session Claude khác (crossSessionInbound: refuse), nên ở đây chỉ hiện các tin nhắn mà conductor đã nhận.",
   "handoff_list_button": "Danh sách bàn giao",
   "handoff_notify_body": "Session #{id} ({provider}) — {window}: còn {remaining}%.",
   "handoff_window_5h": "Giới hạn 5 giờ",

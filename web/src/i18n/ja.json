@@ -2209,6 +2209,7 @@
   "relay_plan_required": "Plan file を選択または入力してください。",
   "relay_error_capacity": "Relay の同時実行枠を取得できませんでした。もう一度試してください。",
   "relay_error_session_missing": "対象セッションが見つかりません。",
+  "orchestration_cross_session_refuse_note": "指揮者と relay の子は、別の Claude セッションからのメッセージを受け取らない設定（crossSessionInbound: refuse）で起動します。ここに出るのは指揮者が受け取ったものだけです。",
   "handoff_list_button": "引き継ぎ一覧",
   "handoff_notify_body": "セッション #{id}（{provider}）— {window}: 残り{remaining}%です。",
   "handoff_window_5h": "5時間制限",

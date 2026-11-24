@@ -2209,6 +2209,7 @@
   "relay_plan_required": "Choose or enter a plan file.",
   "relay_error_capacity": "Could not read relay capacity. Try again.",
   "relay_error_session_missing": "The selected session is no longer available.",
+  "orchestration_cross_session_refuse_note": "Conductor and relay children start with a setting that refuses messages from other Claude sessions (crossSessionInbound: refuse), so only messages the conductor received appear here.",
   "handoff_list_button": "Handoff list",
   "handoff_notify_body": "Session #{id} ({provider}) — {window}: {remaining}% remaining.",
   "handoff_window_5h": "5-hour limit",

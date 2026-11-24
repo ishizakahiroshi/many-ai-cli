@@ -251,5 +251,7 @@ test('stylesheets linked after styles.css do not redraw the card frame, and both
   assert.equal((css.match(/--state-appr:\s*#[0-9a-f]{6};/gi) || []).length, 2, 'dark and light themes define --state-appr');
   assert.equal((css.match(/--state-stop:\s*#[0-9a-f]{6};/gi) || []).length, 2, 'dark and light themes define --state-stop');
   assert.match(readWeb('styles/session-list-tabs.css'), /\.card-state-pill\.stopped-unseen\s*\{\s*color:\s*var\(--state-stop\);/);
+  // The session strip's stopped-unseen mark uses the card frame's color, not a second yellow.
+  assert.match(readWeb('styles/session-strip.css'), /\.session-strip-item\.stopped-unseen \.session-strip-state\s*\{\s*color:\s*var\(--state-stop\);/);
   assert.match(css, /\.card-state-pill\.awaiting-approval\s*\{[^}]*background:\s*var\(--state-appr\);/);
 });

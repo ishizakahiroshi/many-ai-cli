@@ -103,6 +103,11 @@ Release artifacts are published at
   the Hub, open the dashboard from many-ai-cli each time.
 - The UI components check lists each stale exception by file, rule, selector
   and declaration instead of only a count.
+- The "finished, not opened yet" mark in the session strip at the top now uses
+  the same yellow as the session card's frame.
+- The dashboard's direct message section explains that conductor and relay
+  children refuse messages from other Claude sessions, so it lists only what
+  the conductor received.
 - **Exit from the small Windows window.** Its **Exit** button and title-bar
   **×** now end all connected AI sessions, stop the Hub and close the app.
   When sessions are still running, a confirmation shows their count; with no

@@ -263,6 +263,13 @@ function renderCrossSessionMessages(conductor: any): HTMLElement {
   note.className = 'orchestration-cross-session-note';
   note.textContent = 'Claude の受信画面に出たヘッダーを Hub が検知した、この Hub セッション中の一時履歴です。本文は保存しません。';
   section.appendChild(note);
+  const refuseNote = document.createElement('p');
+  refuseNote.className = 'orchestration-cross-session-note';
+  refuseNote.textContent = i18n(
+    'orchestration_cross_session_refuse_note',
+    'Conductor and relay children start with a setting that refuses messages from other Claude sessions (crossSessionInbound: refuse), so only messages the conductor received appear here.',
+  );
+  section.appendChild(refuseNote);
 
   const events: CrossSessionMessage[] = Array.isArray(conductor.cross_session_messages)
     ? conductor.cross_session_messages.slice().reverse().slice(0, 20)
