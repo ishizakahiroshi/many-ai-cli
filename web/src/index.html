@@ -224,13 +224,15 @@
           </div>
           <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。確認ポップアップの「入力まわりと同じ側」は、画面の配置で選んだ型に追従します。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_session_tabs_layout_label">サイドバーのタブ</span>
+            <label for="session-list-tab-layout-select" class="settings-label" data-i18n="settings_session_tabs_layout_label">サイドバーのタブ</label>
             <select id="session-list-tab-layout-select" class="ui-input settings-select">
-              <option value="horizontal" data-i18n="settings_session_tabs_layout_horizontal">横（既定）</option>
-              <option value="vertical" data-i18n="settings_session_tabs_layout_vertical">縦（左のレール）</option>
+              <option value="top" data-i18n="settings_session_tabs_layout_top">上（既定）</option>
+              <option value="left" data-i18n="settings_session_tabs_layout_left">左</option>
+              <option value="right" data-i18n="settings_session_tabs_layout_right">右</option>
+              <option value="bottom" data-i18n="settings_session_tabs_layout_bottom">下</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_session_tabs_layout_desc">サイドバー上部のタブを、横一列にするか、カードの左に縦に並べるかを選びます。縦は、マウスで使う PC の幅（721px 以上）だけに効き、スマホ幅とタッチ操作の画面では常に横です。タブの並べ替え・カードの移動はどちらでも同じ操作です。この設定はこのブラウザにのみ保存されます。</div>
+          <div class="settings-note" data-i18n="settings_session_tabs_layout_desc">タブバーはカード一覧の上・左・右・下に配置できます。タブバーの「配置」からも変更できます。スマホ幅とタッチ画面では常に上に表示します。設定はこのブラウザに保存されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
             <button type="button" id="input-tools-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
@@ -1291,6 +1293,16 @@
         <button class="ui-button ui-button--secondary ui-button--regular" id="session-list-tab-add" type="button" title="Add tab" aria-label="Add tab">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18V8h3l2-4h7l2 4h4v3M2 18h10M2 8h18M18 14v8M14 18h8"/></svg>
         </button>
+        <label class="session-tab-position-control">
+          <span data-i18n="session_tab_position_action">配置</span>
+          <span hidden id="session-tab-position-label" data-i18n="session_tab_position_label">タブバーの配置</span>
+          <select id="session-tab-position" aria-labelledby="session-tab-position-label" data-i18n-tooltip="session_tab_position_label">
+            <option value="top" data-i18n="settings_session_tabs_layout_top">上（既定）</option>
+            <option value="left" data-i18n="settings_session_tabs_layout_left">左</option>
+            <option value="right" data-i18n="settings_session_tabs_layout_right">右</option>
+            <option value="bottom" data-i18n="settings_session_tabs_layout_bottom">下</option>
+          </select>
+        </label>
       </div>
       <p id="session-list-tabs-storage" role="status" hidden></p>
       <div id="new-session-panel" class="aac-wheel-overlay" hidden>

@@ -18,6 +18,7 @@
 .card-state-pill.stopped-unseen { color: var(--state-stop); }
 #session-list-tab-add { flex: 0 0 32px; width: var(--ui-control-size, var(--ui-control-regular))    ; cursor: pointer; }
 #session-list-tab-add svg { width: 21px; height: 21px; vertical-align: middle; }
+.session-tab-position-control { display: none; }
 .session-list-tab:focus-visible, #session-list-tab-add:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .session-list-tab.drop-before { box-shadow: inset 3px 0 var(--accent); }
 .session-list-tab.drop-after { box-shadow: inset -3px 0 var(--accent); }
@@ -43,6 +44,10 @@ dialog.session-list-tab-dialog:not([open]) {
    24px is a minimum, not a fixed height, so larger text grows the tab instead of clipping it. */
 @media (min-width: 721px) and (not (pointer: coarse)) {
   #session-list-tab-bar { margin: 0 0 3px; }
+  .session-tab-position-control { position: relative; display: inline-flex; align-items: center; align-self: center; gap: 3px; flex: none; min-height: 24px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); font-size: var(--fs-sm); white-space: nowrap; }
+  .session-tab-position-control::after { content: ''; border: 3px solid transparent; border-bottom: 0; border-top-color: currentColor; }
+  .session-tab-position-control:focus-within { outline: 2px solid var(--accent); }
+  .session-tab-position-control select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   .session-list-tab { min-height: 24px; padding: 2px 8px; }
   #session-list-tab-add svg { width: 16px; height: 16px; }
   /* タブ追加はたまにしか使わない。毎日使う「新しいセッション」より目立たないよう、面と枠を消して小さくする。
@@ -50,23 +55,27 @@ dialog.session-list-tab-dialog:not([open]) {
   #session-list-tab-add { --ui-button-bg: transparent; --ui-button-border: transparent; --ui-button-fg: var(--muted); align-self: center; flex-basis: 24px; width: 24px; min-height: 24px; padding: 0; }
   #session-list-tab-add:hover:not(:disabled) { --ui-button-fg: var(--text); }
 }
-/* 縦タブ（設定 → 配置 → サイドバーのタブ の「縦」。クラスの付け外しは session-list-tab-layout.ts）。
-   DOM は動かさず、サイドバーを 2 列の grid にしてタブ帯を左の縦レールへ置く。
-   条件は session-list-tab-layout.ts の VERTICAL_TABS_QUERY と同じ（マウスで使う PC の幅だけ。変えるときは両方を直す）。
-   行: 1 操作ボタン帯（全幅）/ 2 保存失敗の注意 / 3 新規セッションの入力（.aac-wheel-overlay で指す。同じクラスの relay-dialog は position: fixed なので grid に参加しない） / 4 カード一覧 / 5 フッター（全幅）。
-   レールは 2〜4 行目に渡して置き、2〜4 は右の列。非表示の要素は grid に参加しないので、行番号を固定しても詰まる。 */
+/* Keep the toolbar and footer full width. The rail spans the notice, form and card list. */
 @media (min-width: 721px) and (not (pointer: coarse)) {
-  #session-list.tabs-vertical { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr) auto; column-gap: 6px; }
+  #session-list[data-tab-position="bottom"] > #session-list-tab-bar { order: 1; border-bottom: 0; border-top: 1px solid var(--line); margin: 3px 0 0; }
+  #session-list[data-tab-position="bottom"] > .session-footer { order: 2; }
+  #session-list[data-tab-position="bottom"] .session-list-tab { border-width: 2px 1px 1px; border-radius: 0 0 var(--radius-md) var(--radius-md); }
+  #session-list[data-tab-position="bottom"] .session-list-tab[aria-selected="true"] { border-color: var(--accent) transparent transparent; }
+  #session-list.tabs-vertical { display: grid; grid-template-columns: [rail] auto [cards] minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr) auto; column-gap: 6px; }
+  #session-list[data-tab-position="right"] { grid-template-columns: [cards] minmax(0, 1fr) [rail] auto; }
   #session-list.tabs-vertical > * { grid-column: 1 / -1; }
   #session-list.tabs-vertical > #new-session-bar { grid-row: 1; }
-  #session-list.tabs-vertical > #session-list-tab-bar { grid-column: 1; grid-row: 2 / 5; flex-direction: column; align-items: stretch; gap: 3px; min-height: 0; margin: 0; overflow: hidden; border-bottom: 0; border-right: 1px solid var(--line); padding-right: 4px; }
-  #session-list.tabs-vertical > #session-list-tabs-storage { grid-column: 2; grid-row: 2; }
-  #session-list.tabs-vertical > .aac-wheel-overlay:not([hidden]) { grid-column: 2; grid-row: 3; max-height: 45vh; }
-  #session-list.tabs-vertical > #sessions { grid-column: 2; grid-row: 4; }
+  #session-list.tabs-vertical > #session-list-tab-bar { grid-column: rail; grid-row: 2 / 5; flex-direction: column; align-items: stretch; gap: 3px; min-height: 0; margin: 0; overflow: hidden; border-bottom: 0; border-right: 1px solid var(--line); padding-right: 4px; }
+  #session-list[data-tab-position="right"] > #session-list-tab-bar { border-right: 0; border-left: 1px solid var(--line); padding: 0 0 0 4px; }
+  #session-list.tabs-vertical > #session-list-tabs-storage { grid-column: cards; grid-row: 2; }
+  #session-list.tabs-vertical > .aac-wheel-overlay:not([hidden]) { grid-column: cards; grid-row: 3; max-height: 45vh; }
+  #session-list.tabs-vertical > #sessions { grid-column: cards; grid-row: 4; }
   #session-list.tabs-vertical > .session-footer { grid-row: 5; }
   #session-list.tabs-vertical #session-list-tabs { flex-direction: column; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
   #session-list.tabs-vertical .session-list-tab { min-width: 40px; max-width: 112px; border-bottom: 1px solid transparent; border-right: 2px solid transparent; border-radius: var(--radius-md) 0 0 var(--radius-md); touch-action: pan-y; }
   #session-list.tabs-vertical .session-list-tab[aria-selected="true"] { border-bottom-color: transparent; border-right-color: var(--accent); }
+  #session-list[data-tab-position="right"] .session-list-tab { border-width: 1px 1px 1px 2px; border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+  #session-list[data-tab-position="right"] .session-list-tab[aria-selected="true"] { border-right-color: transparent; border-left-color: var(--accent); }
   #session-list.tabs-vertical .session-list-tab.drop-before { box-shadow: inset 0 3px var(--accent); }
   #session-list.tabs-vertical .session-list-tab.drop-after { box-shadow: inset 0 -3px var(--accent); }
   #session-list.tabs-vertical #session-list-tab-add { flex: 0 0 24px; align-self: center; }

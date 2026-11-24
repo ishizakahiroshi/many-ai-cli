@@ -12,6 +12,7 @@ Release artifacts are published at
 
 ### Added
 
+- On desktop, use **Position** next to the sidebar's add-tab button to move the whole tab bar above, below, or to either side of the session cards. Settings → Layout offers the same choice.
 - **`many-ai-cli orchestrate close --role <role> [--id <child session id>]`**
   lets a conductor close its own child, even while it is working (the newest
   child of that role when `--id` is omitted). It uses the same path as the

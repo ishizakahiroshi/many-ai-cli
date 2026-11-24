@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "c05392a73d41d30a7082db1c40c5c565b41367a7",
-    "dirty": true,
+    "commit": "2be020a0aba97334eafd212de2c365b5116015f0",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -48796,7 +48796,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "サイドバーのタブ（箱の切り替え）を、上の横一列にするか、左の縦レールにするかを持つ。"
+          "value": "Desktop placement of the session list tab bar. Mobile drawers keep the top strip."
         },
         "authentication": {
           "state": "not_configured"
