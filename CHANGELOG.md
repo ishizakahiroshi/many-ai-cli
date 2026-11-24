@@ -170,7 +170,10 @@ Release artifacts are published at
   session or from `many-ai-cli provider ...` while a Hub runs, is refused, so it
   cannot point the command the Hub runs for a version check at another
   executable. A dashboard left open for more than a day renews the cookie and
-  sends the change again by itself. Registered AI CLIs are unchanged.
+  sends the change again by itself. A page opened over plain http from another
+  computer does not try that (the browser leaves out the headers there) and
+  says to use an SSH forward or HTTPS, and cancelling during the renewal is
+  treated as a cancel. Registered AI CLIs are unchanged.
 - The Hub refuses a wrapper whose registration or reattach names a provider
   outside the provider id shape (lowercase letters, digits, `.`, `_`, `-`, or
   `shell`), and `many-ai-cli wrap` refuses such a name up front with the reason.

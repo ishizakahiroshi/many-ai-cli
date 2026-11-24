@@ -92,6 +92,44 @@ describe('changing a built-in after the dashboard proof expired', () => {
     expect(result).toMatchObject({ ok: false, kind: 'http', code: 'ui_required' });
   });
 
+  test('cancelling while the page is being read returns aborted, not the first refusal', async () => {
+    const controller = new AbortController();
+    const calls = stubFetch([
+      refused,
+      () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      },
+    ]);
+    const result = await saveProviderDefinition('claude', 'r1', { id: 'claude' }, { signal: controller.signal });
+    expect(calls.map((call) => call.method)).toEqual(['PATCH', 'GET']);
+    expect(result).toEqual({ ok: false, kind: 'aborted' });
+  });
+
+  test('cancelling after the page was read does not send again', async () => {
+    const controller = new AbortController();
+    const calls = stubFetch([
+      refused,
+      () => {
+        controller.abort();
+        return new Response('', { status: 200 });
+      },
+    ]);
+    const result = await saveProviderDefinition('claude', 'r1', { id: 'claude' }, { signal: controller.signal });
+    expect(calls.map((call) => call.method)).toEqual(['PATCH', 'GET']);
+    expect(result).toEqual({ ok: false, kind: 'aborted' });
+  });
+
+  test('a page that is not a secure context does not renew or send again', async () => {
+    Object.defineProperty(globalThis, 'isSecureContext', { value: false, configurable: true });
+    const calls = stubFetch([refused]);
+    const result = await saveProviderDefinition('claude', 'r1', { id: 'claude' });
+    expect(calls).toEqual([{ url: '/api/providers/claude', method: 'PATCH' }]);
+    expect(result).toMatchObject({ ok: false, kind: 'http', status: 403, code: 'ui_required' });
+    if (result.ok) return;
+    expect(providerErrorMessage(result).key).toBe('settings_ai_providers_needs_secure_page');
+  });
+
   test('other refusals and reads are not retried', async () => {
     let calls = stubFetch([() => json(403, { error: 'forbidden' })]);
     expect((await saveProviderDefinition('claude', 'r1', {})).ok).toBe(false);

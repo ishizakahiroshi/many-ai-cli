@@ -101,6 +101,9 @@ type ProviderFetchOutcome =
 // （ページを読み込んだときに Hub が出す cookie）が要る。印はページを読み込んだときにだけ出し直され、
 // 24 時間で切れる。開いたままの画面で断られたら（403 ui_required）、ページの入口を 1 回読んで印を
 // 出し直し、同じ要求を 1 回だけ送り直す。それでも断られたら、呼び出し側が「ページを開き直して」を出す。
+// 別の PC から平文 http で開いた画面（安全でない画面）では、ブラウザが印に要る見出しを送らないので
+// 送り直しても必ず断られる。そのときは取り直さず、最初の断りを返す（呼び出し側が「転送か HTTPS を」を出す）。
+// 取り直しの途中で利用者が取り消したら、断りではなく取り消しとして返す。
 async function providerFetchJSON(
   url: string,
   init: RequestInit | undefined,
@@ -108,7 +111,10 @@ async function providerFetchJSON(
 ): Promise<ProviderFetchOutcome> {
   const first = await providerFetchOnce(url, init, signal);
   if (!refusedForDashboardProof(first, init)) return first;
-  if (!(await renewDashboardProof(signal))) return first;
+  if (globalThis.isSecureContext === false) return first;
+  const renewed = await renewDashboardProof(signal);
+  if (signal?.aborted) return { outcome: 'aborted' };
+  if (!renewed) return first;
   return providerFetchOnce(url, init, signal);
 }
 
