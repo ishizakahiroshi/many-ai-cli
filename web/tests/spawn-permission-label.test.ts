@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import {
   cacheProviderDeclarations,
   clearProviderDeclarations,
@@ -51,5 +51,35 @@ describe('permission mode wording per provider', () => {
   test('before any declaration arrives nothing is treated as built-in', () => {
     clearProviderDeclarations();
     expect(permissionLabelKeys('bypass', cursorAgentId!)).toEqual(['spawn_permission_bypass']);
+  });
+});
+
+// 上の検査は provider-declarations.ts の関数だけを見る。起動パネルが自前の判定
+// （id が cursor で始まるか）へ戻ると、それらが全部通ったまま登録型にも Cursor の文言が出る。
+// 起動パネルのファイルは名前で決め打ちせず、permissionLabel を定義しているファイルとして探す。
+describe('the spawn UI takes its permission wording from provider-declarations', () => {
+  const appDir = new URL('../src/app/', import.meta.url);
+  const appSources = readdirSync(appDir)
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => ({ name, text: readFileSync(new URL(name, appDir), 'utf8') }));
+  const labelOwners = appSources.filter((file) => /function permissionLabel\(/.test(file.text));
+
+  test('permissionLabel delegates to permissionLabelText', () => {
+    expect(labelOwners.length).toBe(1);
+    const source = labelOwners[0].text;
+    const body = source.match(/function permissionLabel\([^)]*\)[^{]*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(body).toBeDefined();
+    expect(body!).toMatch(/return permissionLabelText\(kind, p,/);
+    expect(source).toMatch(/function permissionAutoLabel\([^)]*\)[^{]*\{\s*return permissionLabel\('auto', p\);/);
+    expect(source).toMatch(/function permissionBypassLabel\([^)]*\)[^{]*\{\s*return permissionLabel\('bypass', p\);/);
+  });
+
+  test('no app file checks the Cursor id prefix on its own', () => {
+    // 判定の持ち主は provider-declarations.ts だけ（同梱かどうかを先に確かめる）。
+    // 一致した箇所だけを比べる（ファイル全文を失敗の表示に出さない）。
+    const found = appSources.filter((file) => file.name !== 'provider-declarations.ts').flatMap((file) =>
+      (file.text.match(/startsWith\(\s*['"`]cursor[^)]*\)/g) ?? []).map((hit) => `${file.name}: ${hit}`),
+    );
+    expect(found).toEqual([]);
   });
 });
