@@ -233,6 +233,15 @@ describe('FilesPreview.renderMarkdown の remote モード', () => {
       sanitizeConfigs,
     };
   }
+  test('自前のリンクの仕組みを説明するコメントは、実在する関数の名前だけを指す', () => {
+    const files = read('../src/app/files-view.ts');
+    const named = new Set(files.match(/\b[a-z]\w*MarkdownSelfLinks?\b/g) ?? []);
+    expect(named.size).toBeGreaterThan(0);
+    for (const name of named) {
+      expect(files).toContain(`function ${name}(`);
+    }
+  });
+
   const markdown = [
     '[web](https://example.com/a)',
     '[rel](docs/other.md)',

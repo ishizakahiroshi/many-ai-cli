@@ -2242,7 +2242,7 @@ export const FilesPreview = (function () {
 
   // renderMarkdown が自分で作るリンク（相対の .md・PC のパス）の行き先の表。
   // 行き先は属性に書かず、この表に持つ。HTML には「描くたびに作る乱数の鍵 + 表の番号」だけを
-  // MD_SELF_LINK_ATTR に書き、描いたあと wireMarkdownSelfLinks が鍵の合うものだけを自前のリンクとして登録する。
+  // MD_SELF_LINK_ATTR に書き、描いたあと takeMarkdownSelfLinks が鍵の合うものだけを返し、呼び出し元がそれを自前のリンクとして登録する。
   // 文書の生の HTML は鍵を知らない（描く前に中身が決まっている）ので、同じ属性を書いても自前のリンクにならない
   // （2026-11 のセキュリティレビュー: 属性を印にすると、文書が書いて確認のポップアップを素通りできた）。
   const MD_SELF_LINK_ATTR = 'data-md-self-link';
