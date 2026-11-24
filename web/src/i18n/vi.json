@@ -2665,5 +2665,16 @@
   "agent_session_usage_hide": "Ẩn mức sử dụng",
   "agent_session_usage_none": "Tác tử chưa báo mức sử dụng. Từ đây không gửi yêu cầu nào.",
   "agent_session_agent_conversations": "Danh sách hội thoại của tác tử",
-  "agent_session_no_agent_conversations": "Không có hội thoại nào để liệt kê."
+  "agent_session_no_agent_conversations": "Không có hội thoại nào để liệt kê.",
+  "headless_billing_label": "Cách thanh toán cho lần chạy này",
+  "headless_billing_plan": "Đăng nhập gói (mặc định)",
+  "headless_billing_api": "Khóa API (tính phí theo mức dùng)",
+  "headless_billing_profile_label": "Cách lấy khóa",
+  "headless_billing_profile_choose": "Chọn cách lấy khóa trên máy này",
+  "headless_billing_budget_label": "Ngân sách dừng (USD)",
+  "headless_billing_api_notice": "Chỉ dùng cho Claude chạy không giao diện. Ngân sách dừng theo ước tính của CLI nên có thể vượt một chút. CLAUDE.md, skills và MCP tự phát hiện sẽ bị bỏ qua. Lựa chọn này không được ghi nhớ.",
+  "headless_billing_unavailable": "Không đọc được tệp cài đặt cách lấy khóa, hoặc tệp chưa được đặt quyền chỉ riêng bạn.",
+  "headless_billing_invalid": "Thanh toán bằng khóa API cần chế độ chạy không giao diện, cách lấy khóa và ngân sách lớn hơn 0.",
+  "headless_billing_profile_changed": "Cài đặt cách lấy khóa đã thay đổi sau khi mở hộp thoại này. Chưa có gì được khởi chạy. Hãy đóng để xem nội dung hiện tại rồi phê duyệt lại.",
+  "headless_billing_refused": "Chưa khởi chạy: {detail}"
 }

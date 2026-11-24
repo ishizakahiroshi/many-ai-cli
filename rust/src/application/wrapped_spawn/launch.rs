@@ -456,6 +456,38 @@ fn prepare_resolved(
         }
         if config::is_headless_execution_mode(&spec.execution_mode) {
             args.push("--headless".into());
+            // Only the confirmed selection: a profile ID, the approved file
+            // revision and the budget. The recipe never enters argv (Issue #14).
+            if let Some(billing) = spec
+                .registration_metadata
+                .headless_billing
+                .as_ref()
+                .filter(|billing| billing.is_api())
+            {
+                config::headless_billing::verify_revision(&options.paths, billing)
+                    .map_err(|_| InvalidRequest)?;
+                let budget = billing
+                    .max_budget_usd
+                    .filter(|value| value.is_finite() && *value > 0.0)
+                    .ok_or(InvalidRequest)?;
+                args.extend([
+                    "--billing-mode".into(),
+                    billing.mode.clone().into(),
+                    "--billing-profile".into(),
+                    billing.profile_id.clone().into(),
+                    "--billing-revision".into(),
+                    billing.revision.clone().into(),
+                    "--max-budget-usd".into(),
+                    budget.to_string().into(),
+                ]);
+            }
+        } else if spec
+            .registration_metadata
+            .headless_billing
+            .as_ref()
+            .is_some_and(|billing| billing.is_api())
+        {
+            return Err(InvalidRequest);
         }
         prompt = self::prompt(&options.paths, &spec.initial_prompt).map_err(|_| PromptFile)?;
         if let Some(prompt) = &prompt {
@@ -610,21 +642,29 @@ fn prepare_resolved(
             .child_dir("spawn", true)?
             .open_append(&filename)
     };
-    let stdout = match log() {
-        Ok(file) => file,
-        Err(_) if kind == Some(WrappedStartKind::Grid) => {
-            // Go leaves nil stdout/stderr when optional grid logging fails;
-            // exec maps nil output to the native null device.
-            #[cfg(windows)]
-            let null = "NUL";
-            #[cfg(not(windows))]
-            let null = "/dev/null";
-            std::fs::OpenOptions::new()
-                .write(true)
-                .open(null)
-                .map_err(|_| SpawnLog)?
-        }
-        Err(_) => return Err(SpawnLog),
+    let api_billing = spec
+        .registration_metadata
+        .headless_billing
+        .as_ref()
+        .is_some_and(|billing| billing.is_api());
+    let null_device = || {
+        #[cfg(windows)]
+        let null = "NUL";
+        #[cfg(not(windows))]
+        let null = "/dev/null";
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(null)
+            .map_err(|_| SpawnLog)
+    };
+    // An API key run keeps no raw wrapper/provider output log (Issue #14).
+    let stdout = match (!api_billing).then(log) {
+        None => null_device()?,
+        Some(Ok(file)) => file,
+        // Go leaves nil stdout/stderr when optional grid logging fails;
+        // exec maps nil output to the native null device.
+        Some(Err(_)) if kind == Some(WrappedStartKind::Grid) => null_device()?,
+        Some(Err(_)) => return Err(SpawnLog),
     };
     let stderr = stdout.try_clone().map_err(|_| SpawnLog)?;
     if !bare

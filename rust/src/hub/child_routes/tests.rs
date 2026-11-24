@@ -105,6 +105,13 @@ impl ConfirmationExecutor for BoundExecutor {
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError> {
         self.0.get().unwrap().presentation()
     }
+    fn prepare_billing(
+        &self,
+        body: ResolvedChildSpawn,
+        shown_revision: Option<&str>,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        self.0.get().unwrap().prepare_billing(body, shown_revision)
+    }
     fn spawn<'a>(
         &'a self,
         r: ConfirmedChildRequest,
@@ -134,6 +141,7 @@ struct Fixture {
     route: Arc<ChildHttp>,
     io: Arc<Io>,
     parent: SessionBinding,
+    paths: RuntimePaths,
     // Last: fields drop in this order, and on Windows the folder cannot be
     // removed while a field above still holds a file inside it.
     _root: tempfile::TempDir,
@@ -267,6 +275,7 @@ async fn fixture_with_parent(
         route,
         io,
         parent,
+        paths,
     }
 }
 fn request(parent: SessionBinding, origin: &str) -> Request {
@@ -888,4 +897,344 @@ async fn an_acp_session_takes_no_inject_from_another_session() {
     };
     let response = control.handle_authenticated(&req, Timestamp::now());
     assert_eq!(response.status, 403);
+}
+
+// ---- Issue #14: API key billing needs a person's spawn confirmation. ----
+// Synthetic values only: no key, no key command is run, no provider starts.
+const SYNTHETIC_RECIPE: &str = "synthetic-resolver-never-run";
+fn save_billing_profile(paths: &RuntimePaths) {
+    crate::config::private_io::write_atomic(
+        &paths.resource(crate::config::Resource::HeadlessBilling),
+        format!(r#"{{"version":1,"profiles":[{{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"{SYNTHETIC_RECIPE}"}}]}}"#).as_bytes(),
+    )
+    .unwrap();
+}
+fn api_request(parent: SessionBinding, origin: &str) -> Request {
+    child_request(
+        parent,
+        serde_json::json!({"role":"worker","provider":"claude","same_tree":true,"execution_mode":"headless","billing_mode":"api-key","billing_profile":"synthetic","max_budget_usd":0.5,"origin":origin}),
+    )
+}
+async fn first_pending(f: &Fixture) -> PendingSpawnConfirmation {
+    bounded(async {
+        loop {
+            if let Some(p) = f.core.pending().into_iter().next() {
+                break p;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+}
+/// A decision sent with only the Hub token (what a conductor's shell has).
+fn token_only() -> VerifiedConfirmationRequest {
+    VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(0))
+}
+/// A decision the router verified as coming from the dashboard.
+fn from_dashboard() -> VerifiedConfirmationRequest {
+    token_only().with_ui_origin(Some(VerifiedUiOrigin::after_server_verification(
+        AuthEpoch(0),
+    )))
+}
+fn assert_human_required(error: &SessionError) {
+    let SessionError::ChildLaunch { status, code, .. } = error else {
+        panic!("expected a refusal that needs a person: {error:?}");
+    };
+    assert_eq!(
+        (*status, code.as_str()),
+        (403, "human_confirmation_required")
+    );
+}
+fn approve(revision: Option<&str>, id: SpawnConfirmationId) -> SpawnConfirmationResponse {
+    SpawnConfirmationResponse {
+        confirmation_id: id,
+        approved: true,
+        billing_mode: Some("api-key".into()),
+        billing_profile: Some("synthetic".into()),
+        billing_revision: revision.map(str::to_owned),
+        max_budget_usd: Some(0.5),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn an_autonomous_api_key_spawn_waits_for_a_person_even_with_confirmation_off() {
+    let f = fixture("off", 4).await;
+    save_billing_profile(&f.paths);
+    let route = f.route.clone();
+    let req = api_request(f.parent, "");
+    let http = tokio::spawn(async move {
+        route
+            .spawn_authenticated(
+                &req,
+                None,
+                &HttpWaitCancellation::default(),
+                Timestamp::now(),
+            )
+            .await
+    });
+    let pending = first_pending(&f).await;
+    // The conductor's own request never starts a paid run.
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    let disclosure = f.route.executor.presentation().unwrap().billing;
+    assert_eq!(disclosure.profiles.len(), 1);
+    assert_eq!(disclosure.revision.len(), 64);
+    assert!(!format!("{disclosure:?}").contains(SYNTHETIC_RECIPE));
+    // The conductor's shell holds the Hub token and can read the confirmation
+    // ID and revision from the socket. Approving with the token alone, even
+    // with the current revision, is refused and the confirmation stays.
+    let error = f
+        .core
+        .clone()
+        .accept_decision(
+            approve(Some(&disclosure.revision), pending.id.clone()),
+            token_only(),
+            Timestamp::now(),
+        )
+        .err()
+        .unwrap();
+    assert_human_required(&error);
+    assert_eq!(f.core.pending().len(), 1);
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    let proof = from_dashboard;
+    // An approval that never saw the billing (no revision) is shown again.
+    for revision in [None, Some("0".repeat(64))] {
+        let error = f
+            .core
+            .clone()
+            .accept_decision(
+                approve(revision.as_deref(), pending.id.clone()),
+                proof(),
+                Timestamp::now(),
+            )
+            .err()
+            .unwrap();
+        let SessionError::BillingProfileChanged { disclosure: fresh } = error.clone() else {
+            panic!("expected a refreshed disclosure: {error:?}");
+        };
+        assert!(fresh.contains("spawn_confirmation_requested"));
+        assert!(!fresh.contains(SYNTHETIC_RECIPE));
+        assert_eq!(f.core.pending().len(), 1);
+        assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    }
+    // The person approves what the dialog showed: the launch carries it.
+    let decision = f
+        .core
+        .clone()
+        .accept_decision(
+            approve(Some(&disclosure.revision), pending.id),
+            proof(),
+            Timestamp::now(),
+        )
+        .unwrap();
+    let task = tokio::spawn(decision.run(TaskCancellation::default()).unwrap());
+    bounded(f.io.entered.acquire()).await.unwrap().forget();
+    let spec = f.io.specs.lock().unwrap().last().cloned().unwrap();
+    let billing = spec.registration_metadata.headless_billing.clone().unwrap();
+    assert!(billing.is_api());
+    assert_eq!(billing.profile_id, "synthetic");
+    assert_eq!(billing.revision, disclosure.revision);
+    assert_eq!(billing.max_budget_usd, Some(0.5));
+    assert!(spec.subscription_profile_id.is_empty());
+    assert_eq!(spec.execution_mode, "headless");
+    f.io.release.add_permits(1);
+    assert!(matches!(
+        bounded(task).await.unwrap(),
+        ConfirmationOutcome::Approved(_)
+    ));
+    assert_eq!(bounded(http).await.unwrap().status, 200);
+}
+
+#[tokio::test]
+async fn a_direct_ui_api_key_spawn_also_goes_through_the_dialog() {
+    let f = fixture("off", 4).await;
+    save_billing_profile(&f.paths);
+    let route = f.route.clone();
+    let req = api_request(f.parent, "ui");
+    let http = tokio::spawn(async move {
+        route
+            .spawn_authenticated(
+                &req,
+                Some(VerifiedUiOrigin::after_server_verification(AuthEpoch(0))),
+                &HttpWaitCancellation::default(),
+                Timestamp::now(),
+            )
+            .await
+    });
+    let pending = first_pending(&f).await;
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    // Refusing ends it; nothing starts.
+    let decision = f
+        .core
+        .clone()
+        .accept_decision(
+            SpawnConfirmationResponse {
+                confirmation_id: pending.id,
+                approved: false,
+                ..Default::default()
+            },
+            VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(0)),
+            Timestamp::now(),
+        )
+        .unwrap();
+    bounded(decision.run(TaskCancellation::default()).unwrap()).await;
+    assert_eq!(bounded(http).await.unwrap().status, 403);
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn the_executor_refuses_api_key_billing_without_a_confirmed_human_decision() {
+    let f = fixture("off", 4).await;
+    save_billing_profile(&f.paths);
+    let body: ChildSpawnRequest = serde_json::from_value(serde_json::json!({"role":"worker","provider":"claude","same_tree":true,"execution_mode":"headless","billing_mode":"api-key","billing_profile":"synthetic","max_budget_usd":0.5})).unwrap();
+    let autonomous =
+        ResolvedChildSpawn::from_request(body.clone(), None, InternalSpawnGrants::default())
+            .unwrap();
+    let mut ui = body;
+    ui.claimed_origin = "ui".into();
+    let ui = ResolvedChildSpawn::from_request(
+        ui,
+        Some(VerifiedUiOrigin::after_server_verification(AuthEpoch(0))),
+        InternalSpawnGrants::default(),
+    )
+    .unwrap();
+    // Even a resolved, current billing selection does not stand in for the
+    // person's approval of this confirmation.
+    let mut resolved = autonomous.clone();
+    let selection = crate::config::headless_billing::validate_selection(
+        "claude",
+        "headless",
+        "api-key",
+        "synthetic",
+        Some(0.5),
+        "",
+    )
+    .unwrap();
+    let resolved_billing = crate::config::headless_billing::resolve(&f.paths, selection).unwrap();
+    resolved.set_billing(resolved_billing.clone());
+    // A confirmation approved with the Hub token alone (as a plan login, the
+    // only thing it may approve) that later carries API key billing is still
+    // not a dashboard decision: the launch itself refuses it as well.
+    let plan: ChildSpawnRequest = serde_json::from_value(serde_json::json!({"role":"worker","provider":"claude","same_tree":true,"execution_mode":"headless"})).unwrap();
+    let mut token_approved =
+        ResolvedChildSpawn::from_request(plan, None, InternalSpawnGrants::default())
+            .unwrap()
+            .approve(
+                &SpawnConfirmationResponse {
+                    confirmation_id: SpawnConfirmationId("sc-synthetic".into()),
+                    approved: true,
+                    ..Default::default()
+                },
+                token_only(),
+            )
+            .unwrap();
+    token_approved.request_mut().billing_mode = "api-key".into();
+    token_approved.request_mut().billing_profile = "synthetic".into();
+    token_approved.request_mut().max_budget_usd = Some(0.5);
+    token_approved.set_billing(resolved_billing);
+    for body in [autonomous, ui, resolved, token_approved] {
+        let result = bounded(f.route.executor.spawn(
+            ConfirmedChildRequest {
+                original_body: body.clone(),
+                parent: f.parent,
+                requested_provider: "claude".into(),
+                body,
+                admission: AdmissionId::default(),
+            },
+            TaskCancellation::default(),
+        ))
+        .await;
+        let Err(SessionError::ChildLaunch { status, code, .. }) = result else {
+            panic!("API key billing must be refused");
+        };
+        assert_eq!(
+            (status, code.as_str()),
+            (403, "human_confirmation_required")
+        );
+    }
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn api_key_billing_for_a_provider_without_support_is_refused_before_any_dialog() {
+    let f = fixture("on", 4).await;
+    save_billing_profile(&f.paths);
+    for provider in ["codex", "copilot", "grok", "command-code"] {
+        let req = child_request(
+            f.parent,
+            serde_json::json!({"role":"worker","provider":provider,"same_tree":true,"execution_mode":"headless","billing_mode":"api-key","billing_profile":"synthetic","max_budget_usd":0.5}),
+        );
+        let route = &f.route;
+        // The caller gets the answer at once: no dialog waits for a person.
+        let response = bounded(route.spawn_authenticated(
+            &req,
+            None,
+            &HttpWaitCancellation::default(),
+            Timestamp::now(),
+        ))
+        .await;
+        assert_eq!(response.status, 400, "{provider}");
+        assert!(f.core.pending().is_empty(), "{provider}");
+    }
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_plan_login_confirmation_cannot_be_raised_to_api_key_billing_with_the_token_alone() {
+    let f = fixture("on", 4).await;
+    save_billing_profile(&f.paths);
+    let route = f.route.clone();
+    let req = child_request(
+        f.parent,
+        serde_json::json!({"role":"worker","provider":"claude","same_tree":true,"execution_mode":"headless"}),
+    );
+    let http = tokio::spawn(async move {
+        route
+            .spawn_authenticated(
+                &req,
+                None,
+                &HttpWaitCancellation::default(),
+                Timestamp::now(),
+            )
+            .await
+    });
+    let pending = first_pending(&f).await;
+    let revision = f.route.executor.presentation().unwrap().billing.revision;
+    // The conductor answers its own plan login confirmation and raises it to
+    // API key billing: refused, still pending, nothing started.
+    let error = f
+        .core
+        .clone()
+        .accept_decision(
+            approve(Some(&revision), pending.id.clone()),
+            token_only(),
+            Timestamp::now(),
+        )
+        .err()
+        .unwrap();
+    assert_human_required(&error);
+    assert_eq!(f.core.pending().len(), 1);
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    // A person picking API key billing in the dashboard launches with it.
+    let decision = f
+        .core
+        .clone()
+        .accept_decision(
+            approve(Some(&revision), pending.id),
+            from_dashboard(),
+            Timestamp::now(),
+        )
+        .unwrap();
+    let task = tokio::spawn(decision.run(TaskCancellation::default()).unwrap());
+    bounded(f.io.entered.acquire()).await.unwrap().forget();
+    let spec = f.io.specs.lock().unwrap().last().cloned().unwrap();
+    let billing = spec.registration_metadata.headless_billing.clone().unwrap();
+    assert!(billing.is_api());
+    assert_eq!(billing.revision, revision);
+    f.io.release.add_permits(1);
+    assert!(matches!(
+        bounded(task).await.unwrap(),
+        ConfirmationOutcome::Approved(_)
+    ));
+    assert_eq!(bounded(http).await.unwrap().status, 200);
 }

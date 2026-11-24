@@ -59,6 +59,7 @@ impl ConfirmationExecutor for Executor {
             config,
             trust_grant_providers: vec!["synthetic-trust-provider".into()],
             child_providers: Default::default(),
+            billing: Default::default(),
         })
     }
     fn spawn<'a>(

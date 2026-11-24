@@ -79,6 +79,8 @@ pub struct SpawnPolicyDependencies {
     pub trusted: TrustObserver,
 }
 pub struct ConfigSpawnLaunchPolicy {
+    /// Reads the private headless billing profiles (Issue #14).
+    paths: RuntimePaths,
     config: Arc<ConfigStore>,
     dependencies: SpawnPolicyDependencies,
     subscriptions: SubscriptionLauncher,
@@ -97,6 +99,46 @@ impl ConfigSpawnLaunchPolicy {
                 .map(str::to_owned),
         );
         Ok(routes::infer(provider, model, &models).into())
+    }
+    /// Whether this launch uses API key billing, after checking it may: the
+    /// confirmed selection is still valid, the private file still has the
+    /// confirmed revision, no subscription login is asked for and the Hub's
+    /// environment names no competing credential or route (names only; no
+    /// value is read into an error). Plan login is never checked here.
+    fn check_api_billing(
+        &self,
+        spec: &WrappedSpawnSpec,
+        base_environment: &[String],
+    ) -> io::Result<bool> {
+        use config::headless_billing as billing;
+        let Some(selected) = spec
+            .registration_metadata
+            .headless_billing
+            .as_ref()
+            .filter(|selected| selected.is_api())
+        else {
+            return Ok(false);
+        };
+        let checked = billing::validate_selection(
+            &spec.provider,
+            &spec.execution_mode,
+            &selected.mode,
+            &selected.profile_id,
+            selected.max_budget_usd,
+            &spec.route,
+        )?;
+        if checked.provider != selected.provider || !spec.subscription_profile_id.trim().is_empty()
+        {
+            return Err(billing::BillingError::InvalidSelection.into());
+        }
+        if spec.subscription_login || spec.usage_probe {
+            return Err(billing::BillingError::InvalidSelection.into());
+        }
+        billing::verify_revision(&self.paths, selected)?;
+        if billing::auth_environment_conflicts(base_environment) {
+            return Err(billing::BillingError::AuthConflict.into());
+        }
+        Ok(true)
     }
     pub fn new(
         paths: RuntimePaths,
@@ -122,6 +164,7 @@ impl ConfigSpawnLaunchPolicy {
                 dependencies.vendor_home.clone(),
                 dependencies.hub_cwd.clone(),
             ),
+            paths,
             config,
             dependencies,
         })
@@ -189,18 +232,23 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
         if (custom || spec.provider == "shell") && !spec.subscription_profile_id.trim().is_empty() {
             return Err(invalid("provider does not support subscription profiles"));
         }
+        let api_billing = self.check_api_billing(spec, base_environment)?;
         // Source order: profile choice/seed occurs once, before login's early
         // return and before route environment construction. Never repeat this in
         // folder_trust or substitute another account after an error.
-        let (subscription_environment, notice) = self
-            .subscriptions
-            .launch(
-                &cfg,
-                &spec.provider,
-                &spec.subscription_profile_id,
-                base_environment,
-            )
-            .map_err(|error| policy_failure(PolicyFailureStage::Subscription, error))?;
+        // API key billing uses no subscription login (Issue #14).
+        let (subscription_environment, notice) = if api_billing {
+            (Vec::new(), None)
+        } else {
+            self.subscriptions
+                .launch(
+                    &cfg,
+                    &spec.provider,
+                    &spec.subscription_profile_id,
+                    base_environment,
+                )
+                .map_err(|error| policy_failure(PolicyFailureStage::Subscription, error))?
+        };
         if let Some(notice) = notice {
             (self.dependencies.seeded)(&notice);
         }
@@ -271,6 +319,11 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
         };
         routes::validate(&spec.provider, &effective_route)
             .map_err(|error| policy_failure(PolicyFailureStage::Route, error))?;
+        // A gateway or local route would send the run elsewhere than the
+        // Anthropic API the person agreed to pay for.
+        if api_billing && !matches!(effective_route.as_str(), "" | "default") {
+            return Err(config::headless_billing::BillingError::AuthConflict.into());
+        }
         let base_environment = self
             .dependencies
             .path_environment

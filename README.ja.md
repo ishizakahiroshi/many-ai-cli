@@ -154,7 +154,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 
 入口は 2 つです。
 
-- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model][@effort]` と `--review provider[/model][@effort]` を渡す。`--strong provider[/model][@effort]` は任意）。`@effort` は子の思考の深さで省略可。`--execution-mode` と `--permission`（権限の段）は全 role 共通で 1 つ。子 1 つだけを起こす `many-ai-cli orchestrate spawn` には `--effort` / `--execution-mode` / `--permission` がある。受理値は `--help` が正典。
+- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model][@effort]` と `--review provider[/model][@effort]` を渡す。`--strong provider[/model][@effort]` は任意）。`@effort` は子の思考の深さで省略可。`--execution-mode` と `--permission`（権限の段）は全 role 共通で 1 つ。子 1 つだけを起こす `many-ai-cli orchestrate spawn` には `--effort` / `--execution-mode` / `--permission` がある。受理値は `--help` が正典。画面なしの Claude の子の払い方はプランのログインが既定で、`--billing-mode api-key --billing-profile <id> --max-budget-usd <金額>` を付けたその 1 回だけ API キーの課金を求められる。この求めは確認の設定にかかわらず、必ず起動確認の画面で人の承認を待ち、ダッシュボードの画面で承認したときだけ起動する。プランのログインの実行は、環境や Claude の設定が API キーを渡している（`ANTHROPIC_API_KEY` か `apiKeyHelper`）と、選んでいないキーに課金されないよう起動前に止まる。取り出し方の設定は、本人だけが読める `~/.many-ai-cli/headless-billing.json` に「キーを取り出すいつものコマンド」を書くだけで、Hub はそのコマンドを実行せず、キーも保存しない。
 - `orchestrate` のサブコマンドは `spawn` / `send` / `close` / `relay` の 4 つ。名前を間違えると使える名前を並べて返す。
 - Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。役割表で CLI・モデル・subscription profile・権限の段を役割ごとに選べ、次の relay まで記憶される。
 

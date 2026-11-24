@@ -257,6 +257,7 @@ fn clear_inherited_raw_cmd_bootstrap(process: &mut ProcessPlan) {
         .env
         .insert(super::launch_payload::CMD_RAW_BOOTSTRAP_ENV.into(), None);
 }
+#[allow(clippy::too_many_arguments)]
 fn apply_hooks(
     context: &WrapperContext<'_>,
     launch: &LaunchPlan,
@@ -265,7 +266,11 @@ fn apply_hooks(
     hooks: &mut SessionHooks,
     args: &mut Vec<String>,
     env: &mut BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
+    recipe: Option<&crate::config::headless_billing::PrivateRecipe>,
 ) -> io::Result<()> {
+    // API key billing (Issue #14): the recipe goes into the same session-owned
+    // settings file as the bounded settings, or into one of its own.
+    let mut recipe_written = false;
     for hook in &launch.required_hooks {
         // A project that widens Claude Code's sandbox would loosen the bounded
         // tier from the repository; refuse and say why (owner's decision B1).
@@ -280,24 +285,27 @@ fn apply_hooks(
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, message));
         }
         match hook {
-            LaunchHook::ClaudeRegistrationSettings { bounded } => match hooks.claude_settings(
-                context.paths,
-                registered,
-                context.executable,
-                port,
-                cfg!(windows),
-                launch.headless,
-                *bounded,
-            ) {
+            LaunchHook::ClaudeRegistrationSettings { bounded } => match hooks
+                .claude_settings_with_recipe(
+                    context.paths,
+                    registered,
+                    context.executable,
+                    port,
+                    cfg!(windows),
+                    launch.headless,
+                    *bounded,
+                    recipe,
+                ) {
                 Ok(extra) => {
+                    recipe_written = recipe.is_some();
                     args.extend(extra.args);
                     for (name, value) in extra.env {
                         env.insert(name.into(), Some(value));
                     }
                 }
                 // The bounded tier never starts without the settings that
-                // keep it bounded (U49).
-                Err(error) if *bounded => return Err(error),
+                // keep it bounded (U49), nor an API key run without its helper.
+                Err(error) if *bounded || recipe.is_some() => return Err(error),
                 Err(_) => eprintln!("wrapper: Claude session settings setup failed"),
             },
             LaunchHook::NoGitHooks => crate::process::git::disable_hooks(env),
@@ -330,6 +338,22 @@ fn apply_hooks(
                     windows_sys::Win32::System::Console::SetConsoleOutputCP(65001);
                 }
             }
+        }
+    }
+    if let Some(recipe) = recipe.filter(|_| !recipe_written) {
+        let extra = hooks.claude_settings_with_recipe(
+            context.paths,
+            registered,
+            context.executable,
+            port,
+            cfg!(windows),
+            launch.headless,
+            false,
+            Some(recipe),
+        )?;
+        args.extend(extra.args);
+        for (name, value) in extra.env {
+            env.insert(name.into(), Some(value));
         }
     }
     Ok(())
@@ -517,6 +541,7 @@ pub async fn run_cli(
                 &mut hooks,
                 &mut args,
                 &mut process.env,
+                None,
             )?;
             if !launch.args.prompt_file.trim().is_empty() {
                 let shim = resolver.launch_shell_shim(provider, launch.custom_argv.as_deref())?;
@@ -607,8 +632,68 @@ async fn run_headless(
     proof.take();
     // Progress is reported only for the run the Hub issued at registration.
     let run_id = registered_run_id(&registered);
+    let api_billing = launch.billing.is_api();
     let mut hooks = SessionHooks::default();
     let mut args = launch.provider_args.clone();
+    // API key billing (Issue #14): only a selection the Hub confirmed at this
+    // registration, after the auth and version checks. A refusal ends the
+    // session with a fixed reason; nothing has run.
+    let recipe = if api_billing {
+        let version_probe = (|| -> io::Result<ProcessPlan> {
+            let command = resolver.resolve_provider(
+                &launch.provider,
+                launch.custom_argv.as_deref(),
+                &["--version".to_owned()],
+            )?;
+            let mut probe = process.clone();
+            probe.executable = command.executable.into();
+            probe.args = command.args.into_iter().map(Into::into).collect();
+            probe.stdin.clear();
+            Ok(probe)
+        })();
+        let prepared = match version_probe {
+            Ok(probe) => {
+                launch::billing::prepare(
+                    launch::billing::BillingContext {
+                        paths: context.paths,
+                        home_dir: context.home_dir,
+                        cwd: context.cwd,
+                        environment: context.environment,
+                        launch: &launch,
+                        registered: &registered,
+                    },
+                    &probe,
+                    cancel,
+                )
+                .await
+            }
+            Err(_) => Err(crate::config::headless_billing::BillingError::UnsupportedVersion.into()),
+        };
+        match prepared {
+            Ok(recipe) => Some(recipe),
+            Err(error) => {
+                let frame = start_failed(registered.session_id, &error);
+                let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+                return Err(error);
+            }
+        }
+    } else {
+        // Plan login (the default): a provider that could bill a key must not
+        // be billed to one the environment or settings provide (Issue #14).
+        if crate::config::headless_billing::api_key_supported(&launch.provider)
+            && let Err(error) = launch::billing::check_plan_login(
+                context.paths,
+                context.home_dir,
+                context.cwd,
+                context.environment,
+            )
+        {
+            let frame = start_failed(registered.session_id, &error);
+            let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+            return Err(error);
+        }
+        None
+    };
     apply_hooks(
         &context,
         &launch,
@@ -617,7 +702,15 @@ async fn run_headless(
         &mut hooks,
         &mut args,
         &mut process.env,
+        recipe.as_ref(),
     )?;
+    drop(recipe);
+    if api_billing && let Err(error) = launch::billing::finish_args(&mut args, &launch.billing) {
+        let frame = start_failed(registered.session_id, &error);
+        let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+        hooks.finish()?;
+        return Err(error);
+    }
     let prompt = launch::expand_prompt(
         &launch::take_prompt_file(context.paths, Path::new(launch.args.prompt_file.trim()))?,
         registered.session_id,
@@ -661,23 +754,21 @@ async fn run_headless(
         prompt,
         prompt_via: def.prompt_via.clone(),
         format: def.format.clone(),
-        raw_logs: context
-            .config
-            .log
-            .session_enabled
-            .then(|| headless::RawLogs {
-                paths: context.paths.clone(),
-                prefix: std::path::PathBuf::from("headless").join(format!(
-                    "{}_{}",
-                    launch.provider.replace(['/', '\\'], "_"),
-                    chrono::Local::now().format("%Y%m%d-%H%M%S.%3f")
-                )),
-            }),
+        // An API key run keeps no raw provider log (Issue #14).
+        raw_logs: (context.config.log.session_enabled && !api_billing).then(|| headless::RawLogs {
+            paths: context.paths.clone(),
+            prefix: std::path::PathBuf::from("headless").join(format!(
+                "{}_{}",
+                launch.provider.replace(['/', '\\'], "_"),
+                chrono::Local::now().format("%Y%m%d-%H%M%S.%3f")
+            )),
+        }),
         event_capacity: 1024,
     };
-    let execution = headless::run_with_progress(
+    let execution = headless::run_with_progress_mode(
         spec,
         run_id.unwrap_or_else(|| "unreported".into()),
+        api_billing,
         &child_cancel,
         move |bytes| {
             if tx.try_send(bytes.to_vec()).is_err() {
@@ -860,6 +951,10 @@ fn registered_run_id(registered: &Message) -> Option<String> {
     #[serde(deny_unknown_fields)]
     struct RegistrationData {
         headless_run_id: String,
+        /// Read by `launch::billing::hub_confirmed` (Issue #14).
+        #[serde(default)]
+        #[allow(dead_code)]
+        headless_billing: Option<serde::de::IgnoredAny>,
     }
     if registered.data.is_empty() || registered.data.len() > 1024 {
         return None;

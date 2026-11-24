@@ -1186,6 +1186,12 @@ pub enum SessionError {
     AuthenticationExpired,
     ConfirmationMissing,
     ConfirmationDecided,
+    /// The headless billing profiles changed after the dialog was shown. The
+    /// confirmation stays pending; this carries its refreshed public disclosure
+    /// (a serialized `spawn_confirmation_requested` message, no recipe).
+    BillingProfileChanged {
+        disclosure: String,
+    },
     ChildLaunch {
         status: u16,
         code: String,
@@ -2237,6 +2243,23 @@ pub struct ChildSpawnRequest {
     pub effort: String,
     #[serde(rename = "execution_mode", deserialize_with = "null_default")]
     pub execution_mode: String,
+    /// Rust-only (Issue #14): `plan-login` (empty) or `api-key`. A request for
+    /// `api-key` always waits for a person's spawn confirmation.
+    #[serde(
+        rename = "billing_mode",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub billing_mode: String,
+    /// The private billing profile ID (never its recipe).
+    #[serde(
+        rename = "billing_profile",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub billing_profile: String,
+    #[serde(rename = "max_budget_usd", skip_serializing_if = "Option::is_none")]
+    pub max_budget_usd: Option<f64>,
     #[serde(rename = "permission_preset", deserialize_with = "null_default")]
     pub permission_preset: String,
     #[serde(rename = "origin", deserialize_with = "null_default")]
@@ -2261,6 +2284,18 @@ pub struct SpawnConfirmationResponse {
     pub effort: Option<String>,
     #[serde(rename = "execution_mode")]
     pub execution_mode: Option<String>,
+    /// Rust-only (Issue #14). Present is the person's choice for this run only;
+    /// it is never remembered for the role or the next spawn.
+    #[serde(rename = "billing_mode", skip_serializing_if = "Option::is_none")]
+    pub billing_mode: Option<String>,
+    #[serde(rename = "billing_profile", skip_serializing_if = "Option::is_none")]
+    pub billing_profile: Option<String>,
+    /// The profile file revision the dialog showed. API key billing is refused
+    /// when the file changed after that.
+    #[serde(rename = "billing_revision", skip_serializing_if = "Option::is_none")]
+    pub billing_revision: Option<String>,
+    #[serde(rename = "max_budget_usd", skip_serializing_if = "Option::is_none")]
+    pub max_budget_usd: Option<f64>,
     #[serde(rename = "permission_preset")]
     pub permission_preset: Option<String>,
     #[serde(rename = "remember_permission")]
@@ -2302,14 +2337,32 @@ impl VerifiedUiOrigin {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedConfirmationRequest {
     auth_epoch: AuthEpoch,
+    /// The dashboard's own proof (signed UI cookie, same-origin Fetch Metadata
+    /// and an allowed Origin) came with this request. The Hub token alone,
+    /// which a conductor's shell holds, never sets it (Issue #14).
+    from_ui: bool,
 }
 impl VerifiedConfirmationRequest {
     /// Issue only after token/method/Host/Origin and applicable PIN checks.
     pub(crate) fn after_server_authentication(auth_epoch: AuthEpoch) -> Self {
-        Self { auth_epoch }
+        Self {
+            auth_epoch,
+            from_ui: false,
+        }
+    }
+    /// Records the dashboard's proof when the router verified one for the
+    /// same auth epoch. `None` (a token-only caller) leaves it unset.
+    pub(crate) fn with_ui_origin(mut self, ui: Option<VerifiedUiOrigin>) -> Self {
+        self.from_ui = ui.is_some_and(|ui| ui.auth_epoch() == self.auth_epoch);
+        self
     }
     pub fn auth_epoch(&self) -> AuthEpoch {
         self.auth_epoch
+    }
+    /// Whether the decision came from the dashboard rather than any holder of
+    /// the Hub token. API key billing accepts only such a decision.
+    pub fn from_ui(&self) -> bool {
+        self.from_ui
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2365,6 +2418,24 @@ impl ChildSpawnRequest {
         }
         if let Some(value) = &decision.execution_mode {
             self.execution_mode = value.trim().to_owned();
+        }
+        if let Some(value) = &decision.billing_mode {
+            // The person's pick replaces the request's billing as a whole: a
+            // plan login keeps no profile or budget the AI asked for.
+            self.billing_mode = value.trim().to_owned();
+            self.billing_profile = decision
+                .billing_profile
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_owned();
+            self.max_budget_usd = decision.max_budget_usd;
+            if self.billing_mode.is_empty()
+                || self.billing_mode == crate::config::headless_billing::PLAN_LOGIN
+            {
+                self.billing_profile.clear();
+                self.max_budget_usd = None;
+            }
         }
         if let Some(value) = &decision.permission_preset {
             self.permission_preset = value.trim().to_owned();
@@ -2435,6 +2506,9 @@ pub struct ResolvedChildSpawn {
     request: ChildSpawnRequest,
     origin: VerifiedSpawnOrigin,
     grants: InternalSpawnGrants,
+    /// Server-resolved billing (Issue #14). Set only by the confirmation
+    /// executor; never deserialized and cleared by every human decision.
+    billing: Option<crate::config::headless_billing::ResolvedBilling>,
 }
 impl ResolvedChildSpawn {
     /// Request claims are resolved against server-issued proof before any human
@@ -2457,10 +2531,26 @@ impl ResolvedChildSpawn {
             request,
             origin,
             grants,
+            billing: None,
         })
     }
     pub fn request(&self) -> &ChildSpawnRequest {
         &self.request
+    }
+    pub fn billing(&self) -> Option<&crate::config::headless_billing::ResolvedBilling> {
+        self.billing.as_ref()
+    }
+    pub(crate) fn set_billing(
+        &mut self,
+        billing: crate::config::headless_billing::ResolvedBilling,
+    ) {
+        self.billing = Some(billing);
+    }
+    /// Whether this request asks for API key billing (before or after the
+    /// server resolved it).
+    pub fn requests_api_billing(&self) -> bool {
+        self.billing.as_ref().is_some_and(|b| b.is_api())
+            || self.request.billing_mode.trim() == crate::config::headless_billing::API_KEY
     }
     pub fn origin(&self) -> &VerifiedSpawnOrigin {
         &self.origin
@@ -2490,7 +2580,25 @@ impl ResolvedChildSpawn {
                 "refused confirmation is not an approval".into(),
             ));
         }
-        self.request.apply_human_decision(decision, &proof);
+        let mut decided = self.request.clone();
+        decided.apply_human_decision(decision, &proof);
+        // API key billing spends money, so only a decision made in the
+        // dashboard approves it: whether the AI asked for it or the decision
+        // raised a plan login to it. A caller holding only the Hub token (a
+        // conductor's shell) is refused and the confirmation stays pending.
+        if decided.billing_mode.trim() == crate::config::headless_billing::API_KEY
+            && !proof.from_ui()
+        {
+            return Err(SessionError::ChildLaunch {
+                status: 403,
+                code: "human_confirmation_required".into(),
+                detail: crate::config::headless_billing::BillingError::HumanConfirmationRequired
+                    .to_string(),
+            });
+        }
+        self.request = decided;
+        // Billing is resolved again from the decided request.
+        self.billing = None;
         self.grants = self.grants.with_human_folder_trust(decision, &proof);
         self.origin = VerifiedSpawnOrigin::HumanConfirmation {
             request: proof,
@@ -2611,6 +2719,9 @@ pub enum ProviderCommandPurpose {
 /// or deserialized from wrapper/browser input. Prompt text is not persisted here.
 #[derive(Clone, Default)]
 pub struct SpawnRegistrationMetadata {
+    /// Headless billing a person confirmed for this one launch (Issue #14).
+    /// `None` and plan login launch exactly as before.
+    pub headless_billing: Option<crate::config::headless_billing::ResolvedBilling>,
     /// Trusted Iris owner ticket JSON. Never accepted from wrapper/browser
     /// input, included in session display metadata, or replayed as spawn work.
     pub iris_owner_context: String,

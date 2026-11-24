@@ -45,6 +45,12 @@ import {
   folderTrustOffered,
   folderTrustDecision,
   subscriptionDecision,
+  billingDecision,
+  billingFieldShown,
+  billingProfilesFor,
+  billingRefusalDetail,
+  refreshSpawnConfirmationDisclosure,
+  BILLING_API_KEY,
   isRegisteredChildProvider,
   permissionModesFor,
   registeredChildProviderChoices,
@@ -366,6 +372,22 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
         <select name="permission_mode" class="ui-input spawn-select"></select>
       </label>
+      <label class="spawn-confirm-field" data-spawn-confirm-billing-field${billingFieldShown(record.billing, provider) ? '' : ' hidden'}>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('headless_billing_label'))}</span>
+        <select name="billing_mode" class="ui-input spawn-select">
+          <option value="plan-login"${record.billing.mode !== BILLING_API_KEY ? ' selected' : ''}>${escapeHtml(t('headless_billing_plan'))}</option>
+          <option value="api-key"${record.billing.mode === BILLING_API_KEY ? ' selected' : ''}>${escapeHtml(t('headless_billing_api'))}</option>
+        </select>
+      </label>
+      <label class="spawn-confirm-field" data-billing-api hidden>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('headless_billing_profile_label'))}</span>
+        <select name="billing_profile" class="ui-input spawn-select"></select>
+      </label>
+      <label class="spawn-confirm-field" data-billing-api hidden>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('headless_billing_budget_label'))}</span>
+        <input name="max_budget_usd" class="ui-input spawn-input" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" value="${record.billing.maxBudgetUsd ?? ''}">
+      </label>
+      <p class="spawn-confirm-billing-note" data-billing-api hidden>${escapeHtml(t('headless_billing_api_notice'))}${record.billing.unavailable ? ' ' + escapeHtml(t('headless_billing_unavailable')) : ''}</p>
       <label class="spawn-confirm-remember" data-spawn-confirm-remember>
         <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
         <span>${escapeHtml(t('spawn_confirm_remember_permission'))}</span>
@@ -408,6 +430,31 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const trustInput = dialog.querySelector('[name=grant_folder_trust]') as HTMLInputElement | null;
   const subscriptionField = dialog.querySelector('[data-spawn-confirm-subscription-field]') as HTMLElement | null;
   const subscriptionSelect = dialog.querySelector('[data-spawn-confirm-subscription]') as HTMLSelectElement | null;
+  const billingField = dialog.querySelector('[data-spawn-confirm-billing-field]') as HTMLElement | null;
+  const billingSelect = dialog.querySelector('[name=billing_mode]') as HTMLSelectElement | null;
+  const billingProfileSelect = dialog.querySelector('[name=billing_profile]') as HTMLSelectElement | null;
+  const billingBudget = dialog.querySelector('[name=max_budget_usd]') as HTMLInputElement | null;
+
+  // 払い方の欄（Issue #14）。選んでいる CLI に取り出し方の設定があるか、AI がキー課金を
+  // 求めたときだけ出す。キー課金を選んだときだけ、取り出し方・予算・注意を出す。
+  function refreshBilling(): void {
+    const provider = providerSelect?.value || record.provider;
+    const shown = billingFieldShown(record.billing, provider);
+    if (billingField) billingField.hidden = !shown;
+    const api = shown && billingSelect?.value === BILLING_API_KEY;
+    dialog.querySelectorAll<HTMLElement>('[data-billing-api]').forEach((el) => { el.hidden = !api; });
+    if (billingProfileSelect) {
+      const keep = billingProfileSelect.value || record.billing.profile;
+      const profiles = billingProfilesFor(record.billing, provider);
+      billingProfileSelect.innerHTML = [
+        `<option value="">${escapeHtml(t('headless_billing_profile_choose'))}</option>`,
+        ...profiles.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.displayName)}</option>`),
+      ].join('');
+      billingProfileSelect.value = profiles.some((p) => p.id === keep) ? keep : '';
+    }
+  }
+  billingSelect?.addEventListener('change', refreshBilling);
+  refreshBilling();
 
   // CLI を差し替えたら、その CLI の契約一覧に引き直す。別 CLI の契約は残さない
   // （残すと Hub が「その CLI の契約ではない」として承認を断る）。
@@ -528,6 +575,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       refreshFolderTrust();
       refreshRegisteredFields();
       refreshSubscriptionChoices();
+      refreshBilling();
       // effort の候補も provider ごとに違う。写像が無い provider を選んだら欄を隠し、
       // 前の provider の値を送ってしまわないよう選択も空へ戻す（Hub はその値を
       // 400 で弾くので、残ったままだと承認できなくなる）。
@@ -629,10 +677,25 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       showStatus(t('spawn_model_provider_mismatch'));
       return;
     }
+    // 払い方はこの 1 回の決定にだけ載せる（役割や次回の既定へ覚えない）。
+    const billing = billingDecision({
+      shown: !!billingField && !billingField.hidden,
+      approved,
+      mode: billingSelect?.value || '',
+      executionMode: (dialog.querySelector('[name=execution_mode]') as HTMLSelectElement | null)?.value || '',
+      profile: billingProfileSelect?.value || '',
+      budgetText: billingBudget?.value || '',
+      revision: record.billing.revision,
+    });
+    if (billing && 'error' in billing) {
+      showStatus(t(billing.error));
+      return;
+    }
     state = 'deciding';
     if (providerSelect) providerSelect.disabled = true;
     if (modelInput) modelInput.disabled = true;
-    for (const name of ['effort', 'execution_mode', 'permission_preset', 'permission_mode', 'subscription']) {
+    if (billingBudget) billingBudget.disabled = true;
+    for (const name of ['effort', 'execution_mode', 'permission_preset', 'permission_mode', 'subscription', 'billing_mode', 'billing_profile']) {
       const el = dialog.querySelector(`[name=${name}]`) as HTMLSelectElement | null;
       if (el) el.disabled = true;
     }
@@ -677,6 +740,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     // 信頼の登録は、チェックボックスを出しているときに承認した場合だけ送る。
     const grantFolderTrust = folderTrustDecision(!!trustField && !trustField.hidden, !!trustInput?.checked, approved);
     if (grantFolderTrust !== undefined) payload.grant_folder_trust = grantFolderTrust;
+    if (billing && 'fields' in billing) Object.assign(payload, billing.fields);
     try {
       const res = await apiFetch(`/api/sessions/${record.parentId}/spawn-confirm`, {
         method: 'POST',
@@ -684,6 +748,27 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         body: JSON.stringify(payload),
       });
       if (state !== 'deciding') return; // 既に broadcast 経由で terminal 済み。
+      if (res.status === 409 || res.status === 400 || res.status === 403) {
+        const body = await res.clone().json().catch(() => ({}));
+        if (state !== 'deciding') return;
+        // 取り出し方の設定が変わった: まだ何も起動していない。今の内容で開き直してもらう。
+        if (body?.error === 'billing_profile_changed') {
+          state = 'terminal';
+          const refreshed = refreshSpawnConfirmationDisclosure(record.id, record.parentId, body.confirmation);
+          showStatus(t(refreshed ? 'headless_billing_profile_changed' : 'spawn_confirm_submit_failed'));
+          setActionsToClose();
+          return;
+        }
+        // 払い方を理由に断られたときだけ、その固定文を見せる。払い方と関係ない
+        // 拒否（モデルの不一致など）は下の今までの扱いに任せる。
+        const refusal = billingRefusalDetail(res.status, body);
+        if (refusal !== undefined) {
+          state = 'terminal';
+          showStatus(t('headless_billing_refused', { detail: refusal }));
+          setActionsToClose();
+          return;
+        }
+      }
       const decision = spawnConfirmDecisionFromHttp(res.ok, res.status);
       if (decision.waitForCloseBroadcast) {
         // Hub accepted the decision. Wait briefly for spawn_confirmation_closed,

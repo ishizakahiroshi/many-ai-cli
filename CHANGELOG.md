@@ -23,6 +23,24 @@ Release artifacts are published at
   without using a child slot or blocking CLI updates, and a stream-json run
   whose result reports an error is shown as failed even on exit 0. Cost is an
   estimate while running and the CLI's own result at the end (#14).
+- **Per-run payment for headless Claude children.** Every run uses your plan
+  login unless API key billing is picked for that one run in the spawn
+  confirmation dialog (or asked for with `orchestrate spawn --billing-mode
+  api-key --billing-profile <id> --max-budget-usd <amount>`, which always
+  waits for a person). The key comes from the command named in the private
+  `~/.many-ai-cli/headless-billing.json`, run by Claude Code itself as its
+  `apiKeyHelper`; the Hub never runs it, stores a key or keeps raw output of
+  such a run. Only an approval made in the dashboard counts: one sent with the
+  Hub token alone (as a conductor's shell has) is refused. Conflicting
+  credentials, managed policy, another settings root or a Claude Code version
+  not yet reviewed (2.1.295 and 2.1.330 are) stop the run before it starts,
+  and it is never restarted automatically (#14).
+- **A plan login headless Claude run no longer bills a key silently.** If the
+  environment has a non-empty `ANTHROPIC_API_KEY`, or your user or project
+  Claude settings set `apiKeyHelper` or `env.ANTHROPIC_API_KEY`, the run stops
+  before it starts with a fixed message instead of being billed to that key.
+  Remove it, or pick API key billing for the run. Local model routes are not
+  affected (#14).
 - **Sidebar display density** can be switched between Standard and Compact in
   Settings. Compact uses one-line cards, thinner project headings and a
   details popover after a short hover. The selected-session header also shows

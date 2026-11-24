@@ -1,6 +1,9 @@
 //! Ordinary authenticated spawn-confirm HTTP boundary. Source:
 //! internal/hub/orchestration.go:803-868. No UI-origin cookie or WebSocket
 //! membership is required; the existing token/Host/Origin/PIN guard precedes it.
+//! Exception (Issue #14): approving API key billing needs the dashboard's
+//! proof, which the router attaches when present; a token-only approval of it
+//! answers 403 `human_confirmation_required` and stays pending.
 use super::{
     http::{Request, Response, decode_json},
     task_owner::HubTaskHandle,
@@ -39,6 +42,23 @@ impl GoWire for SpawnConfirmationResponse {
             Field {
                 name: "execution_mode",
                 kind: "*string",
+            },
+            // Rust-only billing extension (Issue #14).
+            Field {
+                name: "billing_mode",
+                kind: "*string",
+            },
+            Field {
+                name: "billing_profile",
+                kind: "*string",
+            },
+            Field {
+                name: "billing_revision",
+                kind: "*string",
+            },
+            Field {
+                name: "max_budget_usd",
+                kind: "*float64",
             },
             Field {
                 name: "permission_preset",
@@ -133,6 +153,19 @@ fn response_error(error: SessionError) -> Response {
             "already_decided",
             "spawn confirmation has already been decided",
         ),
+        // The confirmation stays pending. The fresh public disclosure lets the
+        // dialog show the current profiles; nothing has started.
+        SessionError::BillingProfileChanged { disclosure } => Response::json(
+            409,
+            &serde_json::json!({
+                "ok": false,
+                "error": "billing_profile_changed",
+                "detail": crate::config::headless_billing::BillingError::RevisionChanged.to_string(),
+                "confirmation": serde_json::from_str::<serde_json::Value>(&disclosure)
+                    .unwrap_or(serde_json::Value::Null),
+            }),
+        )
+        .no_store(),
         SessionError::InvalidRequest(detail) => Response::error(400, "bad_request", &detail),
         SessionError::ChildLaunch {
             status,
@@ -209,5 +242,29 @@ mod tests {
             404
         );
         assert_eq!(parent_path("/api/sessions/+1/spawn-confirm").unwrap(), 1);
+    }
+    #[test]
+    fn billing_fields_decode_and_a_changed_profile_is_a_no_store_conflict() {
+        let request = Request {
+            body: br#"{"confirmation_id":"c","approved":true,"billing_mode":"api-key","billing_profile":"synthetic","billing_revision":"r","max_budget_usd":0.5}"#.to_vec(),
+            ..Default::default()
+        };
+        let response: SpawnConfirmationResponse = decode_json(&request).unwrap();
+        assert_eq!(response.billing_mode.as_deref(), Some("api-key"));
+        assert_eq!(response.billing_profile.as_deref(), Some("synthetic"));
+        assert_eq!(response.billing_revision.as_deref(), Some("r"));
+        assert_eq!(response.max_budget_usd, Some(0.5));
+        let disclosure = serde_json::json!({"type":"spawn_confirmation_requested","spawn_confirmation_id":"sc-synthetic","session_id":7});
+        let response = response_error(SessionError::BillingProfileChanged {
+            disclosure: disclosure.to_string(),
+        });
+        assert_eq!(response.status, 409);
+        assert_eq!(
+            response.headers.get("Cache-Control").map(String::as_str),
+            Some("no-store")
+        );
+        let body: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(body["error"], "billing_profile_changed");
+        assert_eq!(body["confirmation"], disclosure);
     }
 }

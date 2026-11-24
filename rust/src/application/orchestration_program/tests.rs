@@ -517,6 +517,17 @@ async fn child_under(
     at: Timestamp,
     execution_mode: &str,
 ) -> SessionBinding {
+    child_under_billed(f, parent, depth, role, at, execution_mode, None).await
+}
+async fn child_under_billed(
+    f: &Fixture,
+    parent: SessionBinding,
+    depth: i64,
+    role: &str,
+    at: Timestamp,
+    execution_mode: &str,
+    headless_billing: Option<crate::config::headless_billing::ResolvedBilling>,
+) -> SessionBinding {
     let spec = WrappedSpawnSpec {
         registration_metadata: SpawnRegistrationMetadata {
             parent: parent.session,
@@ -527,6 +538,7 @@ async fn child_under(
             board_path: f.path.to_string_lossy().into_owned(),
             spawned_at: Some(at),
             prompt_at_launch: true,
+            headless_billing,
             ..Default::default()
         },
         spawn_attempt: None,
@@ -1097,6 +1109,65 @@ async fn audit_u26_timeout_respawn_keeps_the_depth_of_the_child_it_replaces() {
     let snapshot = f.core.snapshot(replacement).unwrap();
     assert_eq!(snapshot.depth, 2);
     assert_eq!(snapshot.parent_session_id, middle.session);
+}
+/// Issue #14: an API key run is a charge a person approved once. A timeout
+/// never starts it again on its own; a plan login child beside it still does.
+#[tokio::test]
+async fn timeout_respawn_never_restarts_an_api_key_billed_child() {
+    let f = fixture().await;
+    configure(&f, |cfg| {
+        cfg.orchestration.child_startup_fail = Some(false);
+        cfg.orchestration.child_timeout_seconds = 10;
+        cfg.orchestration.idle_done_threshold_sec = 0;
+        cfg.orchestration.timeout_respawn = true;
+        cfg.orchestration.max_timeout_respawns = 1;
+    });
+    let at = Timestamp::now();
+    // Synthetic selection only: no profile file, key or command exists.
+    let billed = crate::config::headless_billing::ResolvedBilling {
+        mode: crate::config::headless_billing::API_KEY.into(),
+        profile_id: "synthetic".into(),
+        display_name: "Synthetic".into(),
+        provider: "claude".into(),
+        revision: "0".repeat(64),
+        max_budget_usd: Some(0.5),
+    };
+    let paid = child_under_billed(&f, f.binding, 1, "impl", at, "headless", Some(billed)).await;
+    let plan = child_under(&f, f.binding, 1, "review", at, "headless").await;
+    let starts = || f.io.starts.load(std::sync::atomic::Ordering::SeqCst);
+    let before = starts();
+    lifecycle::poll(&f.owner, at + Duration::from_secs(30))
+        .await
+        .unwrap();
+    {
+        let state = lock(&f.owner.state);
+        let children = &state.boards[&f.id].children;
+        assert!(children[&paid.session].timed_out);
+        // No retry was taken for the paid child; the plan child took its one.
+        assert_eq!(children[&paid.session].retries, 0);
+        assert_eq!(children[&plan.session].retries, 1);
+    }
+    // Wait for the plan child's replacement so the respawn tasks have run.
+    let mut replaced = false;
+    for _ in 0..300 {
+        replaced = lock(&f.owner.state).boards[&f.id]
+            .children
+            .iter()
+            .any(|(id, child)| *id != plan.session && child.registration.role == "review");
+        if replaced {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(replaced, "the plan login child starts again");
+    let state = lock(&f.owner.state);
+    let paid_runs = state.boards[&f.id]
+        .children
+        .values()
+        .filter(|child| child.registration.role == "impl")
+        .count();
+    assert_eq!(paid_runs, 1, "the API key child is not started again");
+    assert_eq!(starts() - before, 1, "only the plan child started again");
 }
 #[tokio::test]
 async fn dismissal_records_unfinished_work_and_latches_child_done() {

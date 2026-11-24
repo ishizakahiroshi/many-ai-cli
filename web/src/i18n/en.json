@@ -2665,5 +2665,16 @@
   "agent_session_usage_hide": "Hide usage",
   "agent_session_usage_none": "The agent has not reported usage. Nothing is requested from here.",
   "agent_session_agent_conversations": "Agent's conversations",
-  "agent_session_no_agent_conversations": "The agent has no conversations to list."
+  "agent_session_no_agent_conversations": "The agent has no conversations to list.",
+  "headless_billing_label": "Payment for this run",
+  "headless_billing_plan": "Plan login (default)",
+  "headless_billing_api": "API key (charged per use)",
+  "headless_billing_profile_label": "Key retrieval setting",
+  "headless_billing_profile_choose": "Choose a local key retrieval setting",
+  "headless_billing_budget_label": "Stop budget (USD)",
+  "headless_billing_api_notice": "Only for a headless Claude run. The budget stops the run by the CLI's estimate and can be exceeded slightly. Auto-discovered CLAUDE.md, skills and MCP are skipped. This choice is not remembered.",
+  "headless_billing_unavailable": "The key retrieval settings file could not be read or is not private to you.",
+  "headless_billing_invalid": "API key billing needs the headless execution mode, a key retrieval setting and a budget above 0.",
+  "headless_billing_profile_changed": "The key retrieval settings changed after this dialog opened. Nothing has started. Close this dialog to see the current settings, then approve again.",
+  "headless_billing_refused": "Not started: {detail}"
 }

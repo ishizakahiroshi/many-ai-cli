@@ -158,7 +158,18 @@ impl OrchestrationProgram {
             let Some(child) = board.children.get_mut(&session) else {
                 return Ok(());
             };
-            if child.retries >= max || child.registration.restart_spec.provider.is_empty() {
+            // An API key run is never restarted automatically: a new run is a
+            // new charge, so it needs its own confirmation (Issue #14).
+            if child.retries >= max
+                || child.registration.restart_spec.provider.is_empty()
+                || child
+                    .registration
+                    .restart_spec
+                    .registration_metadata
+                    .headless_billing
+                    .as_ref()
+                    .is_some_and(|billing| billing.is_api())
+            {
                 return Ok(());
             }
             let retries = child.retries + 1;

@@ -91,6 +91,19 @@ impl GoWire for ChildSpawnRequest {
                 name: "execution_mode",
                 kind: "string",
             },
+            // Rust-only billing extension (Issue #14).
+            Field {
+                name: "billing_mode",
+                kind: "string",
+            },
+            Field {
+                name: "billing_profile",
+                kind: "string",
+            },
+            Field {
+                name: "max_budget_usd",
+                kind: "*float64",
+            },
             Field {
                 name: "permission_preset",
                 kind: "string",
@@ -219,20 +232,34 @@ impl ChildHttp {
             Ok(cfg) => cfg.config,
             Err(_) => return Response::error(500, "internal", "configuration unavailable"),
         };
-        let confirmation = !body.origin().is_human()
-            && match config::effective_spawn_confirm_mode(&cfg.orchestration.spawn_confirm_mode) {
-                "off" => false,
-                "providers" => cfg
-                    .orchestration
-                    .spawn_confirm_providers
-                    .iter()
-                    .any(|provider| {
-                        provider
-                            .trim()
-                            .eq_ignore_ascii_case(&body.request().provider)
-                    }),
-                _ => true,
-            };
+        // A selection that can never launch (an AI CLI without API key billing,
+        // a non-headless run, no profile or budget) is refused here, before a
+        // dialog would make the caller wait for a person to no end.
+        if body.requests_api_billing()
+            && let Err(error) =
+                crate::orchestration::child_options::billing_selection(&body, &cfg, &providers)
+        {
+            return Response::error(400, "bad_request", &error.to_string());
+        }
+        // API key billing spends money: a person confirms it in the dialog
+        // whatever the confirmation setting is or who asked (Issue #14).
+        let confirmation = body.requests_api_billing()
+            || !body.origin().is_human()
+                && match config::effective_spawn_confirm_mode(&cfg.orchestration.spawn_confirm_mode)
+                {
+                    "off" => false,
+                    "providers" => {
+                        cfg.orchestration
+                            .spawn_confirm_providers
+                            .iter()
+                            .any(|provider| {
+                                provider
+                                    .trim()
+                                    .eq_ignore_ascii_case(&body.request().provider)
+                            })
+                    }
+                    _ => true,
+                };
         if confirmation {
             if !body.request().force
                 && let Some(error) = crate::orchestration::child_launch::duplicate_role_child(

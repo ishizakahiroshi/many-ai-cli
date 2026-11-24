@@ -271,6 +271,9 @@ impl OrchestrateCli {
                         ("force", flags::Kind::Bool),
                         ("effort", flags::Kind::String),
                         ("execution-mode", flags::Kind::String),
+                        ("billing-mode", flags::Kind::String),
+                        ("billing-profile", flags::Kind::String),
+                        ("max-budget-usd", flags::Kind::String),
                         ("permission", flags::Kind::String),
                     ],
                 )
@@ -297,10 +300,25 @@ impl OrchestrateCli {
                         ("cwd", "cwd"),
                         ("effort", "effort"),
                         ("execution-mode", "execution_mode"),
+                        ("billing-mode", "billing_mode"),
+                        ("billing-profile", "billing_profile"),
                         ("permission", "permission_preset"),
                     ],
                     &mut body,
                 );
+                // API key billing is only asked for here; the Hub always waits
+                // for a person to approve it in the spawn confirmation.
+                if !flags.value("max-budget-usd").is_empty() {
+                    let budget = flags
+                        .value("max-budget-usd")
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                        .ok_or_else(|| {
+                            error("orchestrate spawn: --max-budget-usd must be a positive number")
+                        })?;
+                    body.insert("max_budget_usd".into(), budget.into());
+                }
                 if flags.boolean("same-tree") {
                     body.insert("same_tree".into(), true.into());
                     warning="warning: same-tree mode: the child edits your working tree directly; do not edit the repository in parallel\n".into();

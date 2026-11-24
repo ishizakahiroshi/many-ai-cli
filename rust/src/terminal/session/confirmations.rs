@@ -20,12 +20,32 @@ pub struct ConfirmationPresentation {
     /// The registered AI CLIs the launch will consult, so the dialog's preview
     /// resolves a registered provider's execution mode the same way.
     pub child_providers: child_options::RegisteredProviders,
+    /// Headless billing profiles (names only) and their file revision.
+    pub billing: config::headless_billing::BillingDisclosure,
 }
 
 /// No default implementation: unavailable preparation/board ownership cannot
 /// turn into a successful placeholder launch or an incomplete disclosure.
 pub trait ConfirmationExecutor: Send + Sync {
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError>;
+    /// Resolves the billing a person just approved (Issue #14). API key billing
+    /// is resolved against the private profiles and must match the revision
+    /// the dialog showed (`shown_revision`); otherwise this answers
+    /// `BillingProfileChanged` and the confirmation stays pending. The default
+    /// (an executor that cannot read the profiles) refuses API key billing.
+    fn prepare_billing(
+        &self,
+        body: ResolvedChildSpawn,
+        shown_revision: Option<&str>,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        let _ = shown_revision;
+        if body.requests_api_billing() {
+            return Err(SessionError::InvalidRequest(
+                config::headless_billing::BillingError::UnknownProfile.to_string(),
+            ));
+        }
+        Ok(body)
+    }
     fn spawn<'a>(
         &'a self,
         request: ConfirmedChildRequest,
@@ -227,7 +247,7 @@ impl SpawnConfirmations for SessionEngine {
             ));
         }
         let executor = self.confirmation_executor()?;
-        let (body, completion) = {
+        let (pending, completion) = {
             let state = lock(&self.state);
             if state.confirmations_stopped {
                 return Err(SessionError::Shutdown);
@@ -242,16 +262,38 @@ impl SpawnConfirmations for SessionEngine {
             if entry.decision.is_some() {
                 return Err(already_decided());
             }
-            (entry.pending.body.clone(), entry.completion.clone())
+            (entry.pending.clone(), entry.completion.clone())
         };
         // Snapshot/validation can call application code. Revalidate the exact
         // entry after returning so replacement or auth rotation cannot be lost.
         let presentation = executor.presentation()?;
         let body = if response.approved {
-            let mut body = body.approve(&response, proof.clone())?;
+            let mut body = pending.body.clone().approve(&response, proof.clone())?;
             validate_launch_options(&mut body)?;
             validate_chosen_subscription(&body, &response, &presentation.config)?;
-            Some(body)
+            match executor.prepare_billing(body, response.billing_revision.as_deref()) {
+                Ok(body) => Some(body),
+                // The profiles changed after the dialog was drawn: hand back the
+                // current disclosure and leave the confirmation pending.
+                Err(SessionError::BillingProfileChanged { .. }) => {
+                    let fresh = executor.presentation()?;
+                    let mut message = requested_message(
+                        pending.parent,
+                        &pending.body,
+                        pending.requested_at,
+                        &fresh,
+                    );
+                    message.spawn_confirmation_id.clone_from(&pending.id.0);
+                    return Err(SessionError::BillingProfileChanged {
+                        disclosure: serde_json::to_string(&message).map_err(|_| {
+                            SessionError::InvalidRequest(
+                                "confirmation disclosure unavailable".into(),
+                            )
+                        })?,
+                    });
+                }
+                Err(error) => return Err(error),
+            }
         } else {
             None
         };
@@ -391,6 +433,10 @@ fn requested_message(
     let body = resolved.request();
     proto::Message {
         r#type: "spawn_confirmation_requested".into(),
+        // Rust-only billing extension inside the existing base64 `data` bytes
+        // (Issue #14): what the AI asked for, the profile names a person may
+        // pick and the revision they are shown at. Never a recipe.
+        data: billing_disclosure_data(body, &disclosure.billing),
         session_id: parent.0,
         role: body.role.clone(),
         provider: body.provider.clone(),
@@ -425,6 +471,26 @@ fn requested_message(
         trust_grant_providers: disclosure.trust_grant_providers.clone(),
         ..Default::default()
     }
+}
+fn billing_disclosure_data(
+    body: &ChildSpawnRequest,
+    billing: &config::headless_billing::BillingDisclosure,
+) -> Vec<u8> {
+    let api = body.billing_mode.trim() == config::headless_billing::API_KEY;
+    serde_json::to_vec(&serde_json::json!({
+        "version": 1,
+        "billing_mode": if api {
+            config::headless_billing::API_KEY
+        } else {
+            config::headless_billing::PLAN_LOGIN
+        },
+        "billing_profile": if api { body.billing_profile.as_str() } else { "" },
+        "max_budget_usd": if api { body.max_budget_usd.filter(|v| v.is_finite()) } else { None },
+        "billing_profiles": billing.profiles,
+        "billing_revision": billing.revision,
+        "billing_unavailable": billing.unavailable.map(|error| error.to_string()),
+    }))
+    .unwrap_or_default()
 }
 impl State {
     pub(super) fn confirmation_frames(

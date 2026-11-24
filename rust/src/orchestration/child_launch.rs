@@ -143,6 +143,8 @@ pub struct ChildPreparation {
     pub branch: String,
 }
 pub struct ChildPreparer {
+    /// Reads the private headless billing profiles (Issue #14).
+    paths: RuntimePaths,
     pub boards: Arc<BoardStore>,
     git: WorktreeGit,
     hub_cwd: PathBuf,
@@ -165,6 +167,7 @@ impl ChildPreparer {
             ));
         }
         Ok(Self {
+            paths: paths.clone(),
             boards: Arc::new(BoardStore::new(paths)),
             git,
             hub_cwd,
@@ -506,6 +509,7 @@ impl ChildLaunchExecutor {
         let cfg = self.cfg()?;
         let resolved = super::child_options::prepare_with(request.body, &cfg, &registered)
             .map_err(|e| ChildLaunchError::new(400, "bad_request", e.to_string()))?;
+        let headless_billing = self.confirmed_billing(&resolved, relay_preparation.is_some())?;
         let body = resolved.request();
         if parent.depth >= cfg.orchestration.max_depth {
             self.notify_limit(
@@ -635,14 +639,18 @@ impl ChildLaunchExecutor {
         // A registered AI CLI has no subscription profiles, so nothing is inherited
         // from the role, the parent or the saved defaults; only an explicit request
         // reaches the policy, which rejects it as a new session does.
-        let subscription =
-            if super::child_options::ORCHESTRATION_PROVIDERS.contains(&body.provider.as_str()) {
-                resolve_subscription(body, &parent, role_subscription, &cfg)
-            } else {
-                body.subscription_profile_id.trim().to_owned()
-            };
+        // API key billing does not use a subscription login: nothing is
+        // inherited from the role, the parent or the saved defaults.
+        let subscription = if headless_billing.is_some() {
+            String::new()
+        } else if super::child_options::ORCHESTRATION_PROVIDERS.contains(&body.provider.as_str()) {
+            resolve_subscription(body, &parent, role_subscription, &cfg)
+        } else {
+            body.subscription_profile_id.trim().to_owned()
+        };
         let spec = WrappedSpawnSpec {
             registration_metadata: SpawnRegistrationMetadata {
+                headless_billing,
                 parent: parent.id,
                 role: body.role.clone(),
                 auto: true,
@@ -771,6 +779,68 @@ impl ChildLaunchExecutor {
             worktree_branch: prep.branch,
         })
     }
+    /// The billing this launch may use (Issue #14). Plan login returns `None`
+    /// and launches exactly as before. API key billing needs all of: a person
+    /// approved this very spawn confirmation from the dashboard (with its UI
+    /// proof, not the Hub token alone), the executor resolved the profile
+    /// at that approval, the private file still has the approved revision, and
+    /// the launch is not a relay (a relay restarts children on its own).
+    fn confirmed_billing(
+        &self,
+        resolved: &ResolvedChildSpawn,
+        relay: bool,
+    ) -> Result<Option<config::headless_billing::ResolvedBilling>, SessionError> {
+        use config::headless_billing::BillingError;
+        let refuse = |status: u16, code: &str, error: BillingError| -> SessionError {
+            ChildLaunchError::new(status, code, error.to_string()).into()
+        };
+        if !resolved.requests_api_billing() {
+            return Ok(None);
+        }
+        // The approval must be a dashboard decision, not one sent with the Hub
+        // token alone (which a conductor's shell holds).
+        if relay
+            || !matches!(
+                resolved.origin(),
+                VerifiedSpawnOrigin::HumanConfirmation { request, .. } if request.from_ui()
+            )
+        {
+            return Err(refuse(
+                403,
+                "human_confirmation_required",
+                BillingError::HumanConfirmationRequired,
+            ));
+        }
+        let Some(billing) = resolved.billing().filter(|billing| billing.is_api()) else {
+            return Err(refuse(
+                403,
+                "human_confirmation_required",
+                BillingError::HumanConfirmationRequired,
+            ));
+        };
+        let request = resolved.request();
+        // The prepared request is what launches; it must still be the approved
+        // selection (prepare_with may have resolved the execution mode).
+        let selection = config::headless_billing::validate_selection(
+            &request.provider,
+            &request.execution_mode,
+            &request.billing_mode,
+            &request.billing_profile,
+            request.max_budget_usd,
+            &request.route,
+        )
+        .map_err(|error| refuse(400, "bad_request", error))?;
+        if !request.subscription_profile_id.trim().is_empty()
+            || selection.profile_id != billing.profile_id
+            || selection.provider != billing.provider
+            || selection.max_budget_usd != billing.max_budget_usd
+        {
+            return Err(refuse(400, "bad_request", BillingError::InvalidSelection));
+        }
+        config::headless_billing::verify_revision(&self.preparation.paths, billing)
+            .map_err(|error| refuse(409, "billing_profile_changed", error))?;
+        Ok(Some(billing.clone()))
+    }
     async fn notify_limit(
         &self,
         parent: SessionBinding,
@@ -824,7 +894,35 @@ impl ConfirmationExecutor for ChildLaunchExecutor {
             config: self.cfg()?,
             trust_grant_providers: self.services.trust_grant_providers()?,
             child_providers: self.services.registered_child_providers(),
+            billing: config::headless_billing::presentation(&self.preparation.paths),
         })
+    }
+    fn prepare_billing(
+        &self,
+        mut body: ResolvedChildSpawn,
+        shown_revision: Option<&str>,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        if !body.requests_api_billing() {
+            return Ok(body);
+        }
+        let selection = super::child_options::billing_selection(
+            &body,
+            &self.cfg()?,
+            &self.services.registered_child_providers(),
+        )
+        .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+        let resolved = config::headless_billing::resolve(&self.preparation.paths, selection)
+            .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+        // The person approved what the dialog showed. A profile file that
+        // changed since then (or a dialog that never showed billing) is shown
+        // again instead of launching.
+        if shown_revision != Some(resolved.revision.as_str()) {
+            return Err(SessionError::BillingProfileChanged {
+                disclosure: String::new(),
+            });
+        }
+        body.set_billing(resolved);
+        Ok(body)
     }
     fn spawn<'a>(
         &'a self,
@@ -962,7 +1060,13 @@ pub fn launch_option_change_note(
     .join(", ")
 }
 fn restart_spec(mut spec: WrappedSpawnSpec) -> WrappedSpawnSpec {
-    spec.registration_metadata = SpawnRegistrationMetadata::default();
+    // Keep the confirmed billing so a restart can never turn an API key run
+    // into a plan run silently; automatic restarts refuse API key billing.
+    let billing = spec.registration_metadata.headless_billing.take();
+    spec.registration_metadata = SpawnRegistrationMetadata {
+        headless_billing: billing,
+        ..Default::default()
+    };
     spec.spawn_attempt = None;
     spec.registration_proof = None;
     spec.label.clear();

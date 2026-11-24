@@ -17,6 +17,13 @@ impl ConfirmationExecutor for BoundConfirmationExecutor {
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError> {
         self.owner()?.presentation()
     }
+    fn prepare_billing(
+        &self,
+        body: ResolvedChildSpawn,
+        shown_revision: Option<&str>,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        self.owner()?.prepare_billing(body, shown_revision)
+    }
     fn spawn<'a>(
         &'a self,
         request: ConfirmedChildRequest,

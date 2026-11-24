@@ -134,6 +134,15 @@ impl Scope {
         }
         let path = clean(input);
         let read = canonical(&path).unwrap_or_else(|_| path.clone());
+        // Checked before every grant (handoff notes and memo mentions included):
+        // these files name how a key is fetched and are never shown.
+        if billing_private_path(&path) || billing_private_path(&read) {
+            return Err(err(
+                403,
+                "forbidden",
+                "private billing configuration is not exposed",
+            ));
+        }
         if r.path == "/api/files-content" && workspace.recorded_handoff_note(&path, &read) {
             return Ok(ReadGrant {
                 path: read,
@@ -301,6 +310,17 @@ pub fn vcs_path(path: &Path) -> bool {
     }
     has(path) || canonical(path).is_ok_and(|p| has(&p))
 }
+/// The headless billing recipes and the session-owned Claude settings that
+/// carry a recipe (`apiKeyHelper`). Matched by name wherever they are.
+fn billing_private_path(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    name == "headless-billing.json"
+        || (name.starts_with("aac-claude-settings-") && name.ends_with(".json"))
+}
 pub fn secret_denied(path: &Path, paths: &RuntimePaths) -> bool {
     let base = path
         .file_name()
@@ -316,7 +336,8 @@ pub fn secret_denied(path: &Path, paths: &RuntimePaths) -> bool {
         .unwrap_or_default()
         .to_string_lossy()
         .to_lowercase();
-    matches!(ext, "pem" | "key")
+    billing_private_path(path)
+        || matches!(ext, "pem" | "key")
         || matches!(
             base.as_str(),
             "any-ai-cli.db"
@@ -398,4 +419,47 @@ pub fn mention_variants(path: &Path, cwd: &Path) -> Vec<String> {
         }
     }
     values
+}
+
+#[cfg(test)]
+mod billing_tests {
+    use super::*;
+    struct AllMentions;
+    impl WorkspaceReads for AllMentions {
+        fn memo_mentions(&self) -> Vec<(String, String)> {
+            Vec::new()
+        }
+        fn recorded_handoff_note(&self, _: &Path, _: &Path) -> bool {
+            true
+        }
+    }
+    #[test]
+    fn billing_files_are_denied_before_workspace_and_handoff_grants() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::production(root.path()).unwrap();
+        let scope = Scope::new(root.path().into(), paths.clone());
+        for name in [
+            "headless-billing.json",
+            "aac-claude-settings-usynthetic-s1-p123.json",
+        ] {
+            let path = root.path().join(name);
+            std::fs::write(&path, b"synthetic-private").unwrap();
+            assert!(secret_denied(&path, &paths));
+            let query = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("path", &path.to_string_lossy())
+                .finish();
+            let request = Request {
+                path: "/api/files-content".into(),
+                query,
+                ..Default::default()
+            };
+            for remote in [false, true] {
+                assert!(
+                    scope
+                        .read_grant(&request, None, remote, &AllMentions)
+                        .is_err()
+                );
+            }
+        }
+    }
 }

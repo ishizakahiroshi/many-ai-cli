@@ -3,6 +3,7 @@
 //! This module never discovers a home, starts a process, or contacts a Hub.
 //! The runtime resolves executables, satisfies the listed hooks, registers the
 //! session, then prepends the prepared prompt after its last argument addition.
+pub mod billing;
 use crate::config::{self, Config, HeadlessDef, Resource, RuntimePaths};
 use crate::files::safe_fs::Dir;
 use crate::profile::registry::{self, Registry};
@@ -34,6 +35,13 @@ pub struct WrapperArgs {
     pub subscription_login: bool,
     pub headless: bool,
     pub prompt_file: String,
+    /// Headless billing (Issue #14): only a selection, never a recipe. The
+    /// wrapper uses API key billing only when the Hub's registration confirms
+    /// the same selection.
+    pub billing_mode: String,
+    pub billing_profile: String,
+    pub billing_revision: String,
+    pub max_budget_usd: String,
     pub provider_args: Vec<String>,
     pub parse_error: Option<String>,
 }
@@ -91,6 +99,10 @@ impl WrapperArgs {
                 "sandbox" => Some(&mut parsed.sandbox),
                 "ask-for-approval" => Some(&mut parsed.ask_for_approval),
                 "prompt-file" => Some(&mut parsed.prompt_file),
+                "billing-mode" => Some(&mut parsed.billing_mode),
+                "billing-profile" => Some(&mut parsed.billing_profile),
+                "billing-revision" => Some(&mut parsed.billing_revision),
+                "max-budget-usd" => Some(&mut parsed.max_budget_usd),
                 _ => None,
             };
             let Some(target) = target else {
@@ -181,6 +193,9 @@ pub fn claude_bounded(args: &WrapperArgs) -> bool {
 /// Provider arguments exclude the prompt body and later session-owned hooks.
 /// No Debug implementation: arbitrary custom arguments may carry credentials.
 pub struct LaunchPlan {
+    /// The requested headless billing, checked for shape only. Plan login
+    /// launches exactly as before.
+    pub billing: config::headless_billing::ResolvedBilling,
     pub provider: String,
     pub args: WrapperArgs,
     pub provider_args: Vec<String>,
@@ -309,6 +324,58 @@ pub fn prepare_launch_with_registry(
     prepare_launch_with_definition(cfg, provider, args, definition.as_ref())
 }
 
+/// The billing selection on the wrapper's own flags, checked for shape only
+/// (Issue #14). Plan login (no flags) carries nothing else; API key billing
+/// needs a headless run of a provider that supports it, a profile, a positive
+/// budget, a pinned revision and no subscription login. Whether the Hub
+/// confirmed it is checked after registration (`billing::prepare`).
+fn launch_billing(
+    provider: &str,
+    args: &WrapperArgs,
+) -> Result<config::headless_billing::ResolvedBilling, LaunchError> {
+    use config::headless_billing::BillingError;
+    let invalid = |error: BillingError| LaunchError(error.to_string());
+    let budget = if args.max_budget_usd.is_empty() {
+        None
+    } else {
+        Some(
+            args.max_budget_usd
+                .parse::<f64>()
+                .map_err(|_| invalid(BillingError::InvalidSelection))?,
+        )
+    };
+    let mut billing = config::headless_billing::validate_selection(
+        provider,
+        if args.headless {
+            config::EXECUTION_MODE_HEADLESS
+        } else {
+            ""
+        },
+        &args.billing_mode,
+        &args.billing_profile,
+        budget,
+        "",
+    )
+    .map_err(invalid)?;
+    if !billing.is_api() {
+        if !args.billing_revision.is_empty() {
+            return Err(invalid(BillingError::InvalidSelection));
+        }
+        return Ok(billing);
+    }
+    let revision = &args.billing_revision;
+    if args.subscription_login
+        || revision.len() != 64
+        || !revision.bytes().all(|c| c.is_ascii_hexdigit())
+    {
+        return Err(invalid(BillingError::RevisionChanged));
+    }
+    billing.revision.clone_from(revision);
+    billing::validate_provider_args(&args.provider_args, true)
+        .map_err(|error| LaunchError(error.to_string()))?;
+    Ok(billing)
+}
+
 /// A provider registered outside config.yaml (a `providers.d` definition) is a
 /// custom provider exactly like a legacy `custom_providers` entry: its launch
 /// comes from the definition. Built-ins and `shell` are never custom.
@@ -343,6 +410,12 @@ pub fn prepare_launch_with_definition(
         .into_iter()
         .find(|p| p.id == provider)
         .or_else(|| registry_custom_provider(provider, definition));
+    let billing = launch_billing(provider, &args)?;
+    if billing.is_api() && custom.is_some() {
+        return Err(LaunchError(
+            config::headless_billing::BillingError::InvalidSelection.to_string(),
+        ));
+    }
     let login_mode = args.subscription_login;
     if login_mode && args.headless {
         return Err(LaunchError(
@@ -544,6 +617,7 @@ pub fn prepare_launch_with_definition(
         required_hooks.push(LaunchHook::Utf8Console);
     }
     Ok(LaunchPlan {
+        billing,
         provider: provider.into(),
         label: args.label.clone(),
         model: args.model.clone(),

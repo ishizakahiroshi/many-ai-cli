@@ -595,6 +595,7 @@ mod tests {
                 config: Config::default(),
                 trust_grant_providers: Vec::new(),
                 child_providers: Default::default(),
+                billing: Default::default(),
             })
         }
         fn spawn<'a>(

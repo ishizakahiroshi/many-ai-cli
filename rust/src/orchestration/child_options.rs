@@ -374,6 +374,39 @@ fn registered_mode_is_human_confirmed(
         && !matches!(request.permission_mode.trim(), "" | "default")
 }
 
+/// The billing a request asks for (Issue #14), checked without reading the
+/// private profiles: plan login (the default) carries no profile or budget;
+/// API key billing needs a headless run of a provider that supports it, a
+/// profile ID, a positive budget, the default route and no subscription login.
+pub fn billing_selection(
+    body: &ResolvedChildSpawn,
+    cfg: &Config,
+    providers: &RegisteredProviders,
+) -> Result<config::headless_billing::ResolvedBilling, ConfigError> {
+    let mode = execution_mode(body.request(), body.origin(), cfg, providers)?;
+    billing_selection_for(body.request(), &mode)
+}
+fn billing_selection_for(
+    request: &ChildSpawnRequest,
+    execution_mode: &str,
+) -> Result<config::headless_billing::ResolvedBilling, ConfigError> {
+    let selected = config::headless_billing::validate_selection(
+        &request.provider,
+        execution_mode,
+        &request.billing_mode,
+        &request.billing_profile,
+        request.max_budget_usd,
+        &request.route,
+    )
+    .map_err(|error| ConfigError::invalid(error.to_string()))?;
+    if selected.is_api() && !request.subscription_profile_id.trim().is_empty() {
+        return Err(ConfigError::invalid(
+            "API key billing cannot select a subscription profile",
+        ));
+    }
+    Ok(selected)
+}
+
 /// Only server-resolved provenance can reach the actual launch preparation.
 /// Configuration adds bounded tools through the internal grant field; request
 /// JSON cannot manufacture that list or a folder-trust grant.
@@ -388,6 +421,7 @@ pub fn prepare_with(
     providers: &RegisteredProviders,
 ) -> Result<ResolvedChildSpawn, ConfigError> {
     let mode = execution_mode(body.request(), body.origin(), cfg, providers)?;
+    billing_selection_for(body.request(), &mode)?;
     body.request_mut().execution_mode = mode;
     // A registered CLI can only be told a model or an effort it has a flag for.
     // Otherwise the request would show a model in the session that never reached

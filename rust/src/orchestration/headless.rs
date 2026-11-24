@@ -186,6 +186,22 @@ pub async fn run_with_progress(
     spec: Spec,
     run_id: String,
     cancel: &Cancellation,
+    emit: impl FnMut(&[u8]),
+    progress: impl FnMut(HeadlessProgress),
+) -> io::Result<RunResult> {
+    run_with_progress_mode(spec, run_id, false, cancel, emit, progress).await
+}
+/// `strict` is the API key billing output boundary (Issue #14): the run must be
+/// Claude stream-json, no raw log is written, no process output is retained,
+/// and no provider byte (stdout record, stderr, broken JSON, tool input or
+/// result, error body) reaches the terminal. The terminal shows fixed lines and
+/// the same masked, bounded last-utterance excerpt the progress card shows.
+/// Process failures map to fixed messages.
+pub async fn run_with_progress_mode(
+    spec: Spec,
+    run_id: String,
+    strict_output: bool,
+    cancel: &Cancellation,
     mut emit: impl FnMut(&[u8]),
     mut progress: impl FnMut(HeadlessProgress),
 ) -> io::Result<RunResult> {
@@ -201,6 +217,31 @@ pub async fn run_with_progress(
         .validate()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let structured = parser == Parser::ClaudeStreamJson;
+    let mut spec = spec;
+    if strict_output {
+        if !structured {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "API key billing requires structured output",
+            ));
+        }
+        spec.raw_logs = None;
+        spec.process.output_cap = 0;
+    }
+    // The strict terminal view: fixed text plus the masked progress excerpt.
+    let mut shown_excerpt = String::new();
+    let mut strict_view = |snapshot: &HeadlessProgress, emit: &mut dyn FnMut(&[u8])| {
+        if strict_output
+            && !snapshot.last_assistant.is_empty()
+            && snapshot.last_assistant != shown_excerpt
+        {
+            shown_excerpt.clone_from(&snapshot.last_assistant);
+            emit(format!("[assistant] {}\r\n", snapshot.last_assistant).as_bytes());
+        }
+    };
+    if strict_output {
+        emit(b"many-ai-cli: API key billing run; provider output is shown only as progress\r\n");
+    }
     let mut plan = spec.process;
     plan.stdin = if normalize_headless_prompt_via(&spec.prompt_via) == "stdin" {
         spec.prompt.into_bytes()
@@ -255,7 +296,10 @@ pub async fn run_with_progress(
                     tracker.heartbeat();
                     last_heartbeat = now;
                 }
-                if let Some(snapshot) = tracker.snapshot(now) { progress(snapshot); }
+                if let Some(snapshot) = tracker.snapshot(now) {
+                    strict_view(&snapshot, &mut emit);
+                    progress(snapshot);
+                }
             },
             event = receiver.recv() => match event {
                 Ok(ProcessEvent::Started { .. }) => {
@@ -271,8 +315,11 @@ pub async fn run_with_progress(
                             None => tracker.mark_incomplete(),
                         });
                     }
-                    let (framer, raw) = if stream == OutputStream::Stdout { (&mut stdout, &mut raw_out) } else { (&mut stderr, &mut raw_err) };
-                    framer.push(&bytes, |line| deliver(line, stream, parser, raw, &mut raw_errors, &mut emit));
+                    // API key billing: no provider byte reaches the terminal.
+                    if !strict_output {
+                        let (framer, raw) = if stream == OutputStream::Stdout { (&mut stdout, &mut raw_out) } else { (&mut stderr, &mut raw_err) };
+                        framer.push(&bytes, |line| deliver(line, stream, parser, raw, &mut raw_errors, &mut emit));
+                    }
                 }
                 Err(RecvError::Closed) => break,
                 Err(RecvError::Lagged(count)) => {
@@ -293,6 +340,7 @@ pub async fn run_with_progress(
             None => tracker.mark_incomplete(),
         });
     }
+    // Nothing was pushed into these framers in strict mode.
     stdout.finish(|line| {
         deliver(
             line,
@@ -327,7 +375,11 @@ pub async fn run_with_progress(
                         outcome: ExitOutcome::Exited { code: Some(-1), signal: None },
                     };
                     progress(tracker.finish(&output, dropped, elapsed(started)));
-                    return Err(error);
+                    return Err(if strict_output {
+                        io::Error::new(error.kind(), "headless provider execution failed")
+                    } else {
+                        error
+                    });
                 }
             },
             _ = cancel.cancelled(), if !canceled => { process.close(); canceled = true; }
@@ -335,6 +387,7 @@ pub async fn run_with_progress(
     };
     let final_progress = tracker.finish(&output, dropped, elapsed(started));
     let failed = final_progress.state != ProgressState::Completed;
+    strict_view(&final_progress, &mut emit);
     progress(final_progress);
     let mut result = RunResult::from_output(output, dropped, raw_errors);
     // A Claude result that reports an error is a failed run even on exit 0.
@@ -615,6 +668,70 @@ mod progress_contracts {
         assert!(terminal.contains("[tool] Read"));
         assert!(terminal.contains("[result]"));
         assert!(!terminal.contains("[progress]"));
+    }
+    /// Issue #14: an API key billing run shows no provider byte in the terminal.
+    #[tokio::test]
+    async fn api_key_billing_terminal_shows_only_fixed_lines_and_the_masked_excerpt() {
+        let root = tempfile::tempdir().unwrap();
+        for mode in ["safe", "api_error", "malformed", "bad_exit"] {
+            let mut terminal = vec![];
+            let mut snapshots = vec![];
+            let mut spec = fixture(mode, root.path());
+            spec.raw_logs = Some(RawLogs {
+                paths: RuntimePaths::production(root.path()).unwrap(),
+                prefix: PathBuf::from("headless").join("synthetic-api"),
+            });
+            run_with_progress_mode(
+                spec,
+                "1:2".into(),
+                true,
+                &Cancellation::default(),
+                |b| terminal.extend_from_slice(b),
+                |p| snapshots.push(p),
+            )
+            .await
+            .unwrap();
+            let terminal = String::from_utf8(terminal).unwrap();
+            for forbidden in [
+                "SENTINEL",
+                "SYNTHETIC_ONLY",
+                "sk-ant-",
+                "[tool]",
+                "\"type\"",
+            ] {
+                assert!(!terminal.contains(forbidden), "{mode}: {forbidden}");
+            }
+            assert!(terminal.starts_with("many-ai-cli: API key billing run"));
+            assert_wire_clean(&snapshots);
+            // No raw provider log is written, even when one was configured.
+            fn any_log(dir: &Path) -> bool {
+                std::fs::read_dir(dir)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .any(|entry| {
+                        let path = entry.path();
+                        path.to_string_lossy().contains("synthetic-api")
+                            || (path.is_dir() && any_log(&path))
+                    })
+            }
+            assert!(!any_log(root.path()), "{mode}: raw log written");
+            if mode == "safe" {
+                assert!(terminal.contains("[assistant] Ready ***"));
+            }
+        }
+        // A text-format provider cannot run with API key billing.
+        let error = run_with_progress_mode(
+            fixture("text", root.path()),
+            "1:2".into(),
+            true,
+            &Cancellation::default(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
     #[tokio::test]
     async fn text_format_reports_lifecycle_without_inventing_structured_values() {

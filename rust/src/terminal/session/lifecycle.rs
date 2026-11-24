@@ -1,5 +1,32 @@
 use super::*;
 use crate::orchestration::handoff::RecordKey;
+/// The `registered` ACK's Rust-only `data`: the headless run ID the Hub issued
+/// and, only for a spawn a person confirmed with API key billing, that
+/// selection (no recipe). Empty when there is neither.
+fn registration_data(
+    progress: Option<&crate::orchestration::headless_progress::HeadlessProgress>,
+    billing: Option<&crate::config::headless_billing::ResolvedBilling>,
+) -> Vec<u8> {
+    let mut data = serde_json::Map::new();
+    if let Some(progress) = progress {
+        data.insert("headless_run_id".into(), progress.run_id.clone().into());
+    }
+    if let Some(billing) = billing.filter(|billing| billing.is_api()) {
+        data.insert(
+            "headless_billing".into(),
+            serde_json::json!({
+                "mode": billing.mode,
+                "profile_id": billing.profile_id,
+                "revision": billing.revision,
+                "max_budget_usd": billing.max_budget_usd,
+            }),
+        );
+    }
+    if data.is_empty() {
+        return Vec::new();
+    }
+    serde_json::to_vec(&data).expect("fixed headless registration JSON")
+}
 impl Session {
     fn spawn_correlation(&self, hub_instance: &str) -> Option<SpawnCorrelationNotification> {
         if self.snapshot.client_request_id.is_empty() || self.usage_probe {
@@ -163,15 +190,13 @@ impl SessionEngine {
             orchestration_id: metadata.orchestration.0.clone(),
             auto: metadata.auto,
             board_path: metadata.board_path.clone(),
-            // The wrapper may only report progress for the run the Hub issued.
-            data: snapshot
-                .headless_progress
-                .as_ref()
-                .map(|p| {
-                    serde_json::to_vec(&serde_json::json!({"headless_run_id": p.run_id}))
-                        .expect("fixed headless registration JSON")
-                })
-                .unwrap_or_default(),
+            // The wrapper may only report progress for the run the Hub issued,
+            // and may only use API key billing a person confirmed for this
+            // spawn attempt (Issue #14). A manual `wrap` has neither.
+            data: registration_data(
+                snapshot.headless_progress.as_ref(),
+                metadata.headless_billing.as_ref(),
+            ),
             ..Default::default()
         };
         let mut effects = CoreEffects::default();
@@ -1077,5 +1102,45 @@ mod tests {
         assert_eq!(current.provider, "wire-provider");
         assert_eq!(current.label, "restored-card-label");
         assert_eq!(current.started_at, "2026-01-02T03:04:05Z");
+    }
+
+    #[test]
+    fn only_a_confirmed_api_key_spawn_puts_billing_into_the_registration_ack() {
+        use crate::config::headless_billing::{API_KEY, ResolvedBilling};
+        let progress =
+            crate::orchestration::headless_progress::HeadlessProgress::new("4:2".into(), 0);
+        // A manual registration has no spawn metadata, so no billing.
+        assert_eq!(
+            registration_data(Some(&progress), None),
+            br#"{"headless_run_id":"4:2"}"#.to_vec()
+        );
+        assert!(registration_data(None, None).is_empty());
+        // Plan login adds nothing either.
+        assert_eq!(
+            registration_data(Some(&progress), Some(&ResolvedBilling::default())),
+            br#"{"headless_run_id":"4:2"}"#.to_vec()
+        );
+        let api = ResolvedBilling {
+            mode: API_KEY.into(),
+            profile_id: "synthetic".into(),
+            display_name: "Synthetic display".into(),
+            provider: "claude".into(),
+            revision: "a".repeat(64),
+            max_budget_usd: Some(0.5),
+        };
+        let data: serde_json::Value =
+            serde_json::from_slice(&registration_data(Some(&progress), Some(&api))).unwrap();
+        assert_eq!(
+            data,
+            serde_json::json!({
+                "headless_run_id": "4:2",
+                "headless_billing": {
+                    "mode": "api-key",
+                    "profile_id": "synthetic",
+                    "revision": "a".repeat(64),
+                    "max_budget_usd": 0.5,
+                },
+            })
+        );
     }
 }

@@ -2665,5 +2665,16 @@
   "agent_session_usage_hide": "利用量を隠す",
   "agent_session_usage_none": "エージェントはまだ利用量を報告していません。ここからは問い合わせません。",
   "agent_session_agent_conversations": "エージェントの会話一覧",
-  "agent_session_no_agent_conversations": "一覧できる会話はありません。"
+  "agent_session_no_agent_conversations": "一覧できる会話はありません。",
+  "headless_billing_label": "この実行の払い方",
+  "headless_billing_plan": "プランのログイン（既定）",
+  "headless_billing_api": "API キー（使った分の課金）",
+  "headless_billing_profile_label": "キーの取り出し方",
+  "headless_billing_profile_choose": "この PC の取り出し方を選ぶ",
+  "headless_billing_budget_label": "止める金額（USD）",
+  "headless_billing_api_notice": "画面なしの Claude だけで使えます。金額は CLI の見込みで止めるため、少し超えることがあります。自動で読む CLAUDE.md・skills・MCP は使いません。この選択は次回へ覚えません。",
+  "headless_billing_unavailable": "取り出し方の設定ファイルを読めないか、本人だけが読める権限になっていません。",
+  "headless_billing_invalid": "API キーの課金は、実行モード「画面なし」・取り出し方・0 より大きい金額がそろったときだけ選べます。",
+  "headless_billing_profile_changed": "この画面を開いた後に取り出し方の設定が変わりました。まだ何も起動していません。閉じると今の内容で開き直すので、確かめてから承認してください。",
+  "headless_billing_refused": "起動していません: {detail}"
 }

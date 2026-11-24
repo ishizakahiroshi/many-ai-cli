@@ -271,12 +271,43 @@ impl SessionHooks {
         headless: bool,
         bounded: bool,
     ) -> io::Result<ClaudeLaunch> {
+        self.claude_settings_with_recipe(
+            paths,
+            registered,
+            executable,
+            hub_port,
+            native_windows,
+            headless,
+            bounded,
+            None,
+        )
+    }
+    /// Like [`Self::claude_settings`], also carrying an API key billing recipe
+    /// as `apiKeyHelper` (Issue #14) in the same session-owned private file, so
+    /// the launch passes exactly one `--settings`. The file is removed with the
+    /// session; leftovers are collected on a later start. The recipe never
+    /// reaches argv, the environment or an error.
+    #[allow(clippy::too_many_arguments)]
+    pub fn claude_settings_with_recipe(
+        &mut self,
+        paths: &RuntimePaths,
+        registered: &Message,
+        executable: &Path,
+        hub_port: u16,
+        native_windows: bool,
+        headless: bool,
+        bounded: bool,
+        recipe: Option<&crate::config::headless_billing::PrivateRecipe>,
+    ) -> io::Result<ClaudeLaunch> {
         let statusbar = !headless && registered.token_statusbar;
         let cross = !headless && registered.auto && !registered.orchestration_id.is_empty();
-        if !statusbar && !cross && !bounded {
+        if !statusbar && !cross && !bounded && recipe.is_none() {
             return Ok(ClaudeLaunch::default());
         }
         let mut doc = serde_json::Map::new();
+        if let Some(recipe) = recipe {
+            recipe.insert_settings(&mut doc);
+        }
         let mut env = Vec::new();
         if statusbar {
             // No token here: Claude runs this through a shell, whose command
@@ -328,7 +359,8 @@ impl SessionHooks {
                 env.push(("GOCACHE".into(), cache.into_os_string()));
             }
         }
-        let mut bytes = serde_json::to_vec_pretty(&doc).map_err(io::Error::other)?;
+        let mut bytes = serde_json::to_vec_pretty(&doc)
+            .map_err(|_| io::Error::other("Claude session settings encoding failed"))?;
         bytes.push(b'\n');
         let path = self.write(
             paths,

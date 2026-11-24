@@ -68,6 +68,103 @@ export interface SpawnConfirmationRecord {
   // よう、組み合わせを先に全部受け取っておく（Hub への往復を挟まない）。
   // 内側の "" は「要求どおり」＝要求に載っていた permission_preset での実効値。
   approval: Record<string, Record<string, ChildApproval>>;
+  // 画面なし実行の払い方（Issue #14）。この 1 回だけの選択で、次回へ覚えない。
+  billing: SpawnBillingDisclosure;
+}
+
+// Hub が確認の `data`（base64 の JSON）に載せる払い方の開示。取り出し方そのもの
+// （コマンド）は載らない。欄を持たない古い Hub からは「プランのログイン・候補なし」。
+export interface SpawnBillingProfile {
+  id: string;
+  displayName: string;
+  provider: string;
+}
+export interface SpawnBillingDisclosure {
+  // AI が要求した払い方。'plan-login'（既定）か 'api-key'。
+  mode: 'plan-login' | 'api-key';
+  profile: string;
+  maxBudgetUsd: number | undefined;
+  profiles: SpawnBillingProfile[];
+  // 画面が見せた取り出し方の設定の版。承認にそのまま載せ、Hub が今の版と照合する。
+  revision: string;
+  // 設定が読めない・本人だけの権限になっていないときの理由（固定文）。
+  unavailable: string;
+}
+
+export const BILLING_PLAN_LOGIN = 'plan-login';
+export const BILLING_API_KEY = 'api-key';
+
+export function billingFromMessageData(data: unknown): SpawnBillingDisclosure {
+  const none: SpawnBillingDisclosure = {
+    mode: BILLING_PLAN_LOGIN, profile: '', maxBudgetUsd: undefined, profiles: [], revision: '', unavailable: '',
+  };
+  if (typeof data !== 'string' || !data || data.length > 65536) return none;
+  let parsed: any;
+  try {
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch (_) {
+    return none;
+  }
+  if (!parsed || parsed.version !== 1) return none;
+  const text = (value: unknown, limit: number): string =>
+    typeof value === 'string' && value.length <= limit ? value : '';
+  const budget = Number(parsed.max_budget_usd);
+  return {
+    mode: parsed.billing_mode === BILLING_API_KEY ? BILLING_API_KEY : BILLING_PLAN_LOGIN,
+    profile: text(parsed.billing_profile, 80),
+    maxBudgetUsd: parsed.max_budget_usd != null && Number.isFinite(budget) && budget > 0 ? budget : undefined,
+    profiles: Array.isArray(parsed.billing_profiles)
+      ? parsed.billing_profiles
+        .filter((p: any) => text(p?.id, 80) && text(p?.display_name, 120) && text(p?.provider, 64))
+        .slice(0, 64)
+        .map((p: any) => ({ id: p.id, displayName: p.display_name, provider: p.provider }))
+      : [],
+    revision: /^[a-f0-9]{64}$/.test(text(parsed.billing_revision, 64)) ? parsed.billing_revision : '',
+    unavailable: text(parsed.billing_unavailable, 200),
+  };
+}
+
+// 選んでいる CLI で選べる取り出し方の設定。
+export function billingProfilesFor(billing: SpawnBillingDisclosure, provider: string): SpawnBillingProfile[] {
+  const key = String(provider || '').trim();
+  return billing.profiles.filter((p) => p.provider === key);
+}
+
+// 払い方の欄を出すか。AI がキー課金を求めたとき、または選んでいる CLI に取り出し方の
+// 設定があるときだけ出す（設定の無い人の確認画面は今までと同じ）。
+export function billingFieldShown(billing: SpawnBillingDisclosure, provider: string): boolean {
+  return billing.mode === BILLING_API_KEY || billingProfilesFor(billing, provider).length > 0;
+}
+
+// 決定の本文に載せる払い方。欄を出していないときは undefined（欄ごと送らない）。
+// キー課金は画面なし・取り出し方・正の予算がそろったときだけで、欠けたら error を返す。
+export type BillingDecision =
+  | { fields: Record<string, unknown> }
+  | { error: 'headless_billing_invalid' };
+export function billingDecision(input: {
+  shown: boolean;
+  approved: boolean;
+  mode: string;
+  executionMode: string;
+  profile: string;
+  budgetText: string;
+  revision: string;
+}): BillingDecision | undefined {
+  if (!input.approved || !input.shown) return undefined;
+  if (input.mode !== BILLING_API_KEY) return { fields: { billing_mode: BILLING_PLAN_LOGIN } };
+  const budget = Number(String(input.budgetText || '').trim());
+  if (input.executionMode !== 'headless' || !input.profile || !Number.isFinite(budget) || budget <= 0) {
+    return { error: 'headless_billing_invalid' };
+  }
+  return {
+    fields: {
+      billing_mode: BILLING_API_KEY,
+      billing_profile: input.profile,
+      max_budget_usd: budget,
+      billing_revision: input.revision,
+    },
+  };
 }
 
 // 起動要求の共通 3 項目の候補値。正本は Hub（internal/config/effort.go）で、
@@ -315,7 +412,32 @@ export function recordFromMessage(m: any): SpawnConfirmationRecord {
       : [],
     requestedAtMs: Number(m?.spawn_requested_at_ms || 0) || Date.now(),
     approval: approvalsFromMessage(m?.spawn_child_approval),
+    billing: billingFromMessageData(m?.data),
   };
+}
+
+// Hub が払い方を理由に承認を断った応答か。払い方の固定文（Hub の BillingError と
+// 払い方の選択の検査の文言）か、人の確認が要るという断りのときだけ true。モデルの
+// 不一致など払い方と関係ない 400 は false にして、今までどおりの扱いに任せる。
+export function billingRefusalDetail(status: number, body: any): string | undefined {
+  if (status !== 400 && status !== 403) return undefined;
+  const detail = typeof body?.detail === 'string' ? body.detail : '';
+  if (!detail) return undefined;
+  const billing = body?.error === 'human_confirmation_required'
+    || (status === 400 && /\b(headless billing|API key billing)\b/.test(detail));
+  return billing ? detail.slice(0, 300) : undefined;
+}
+
+// 取り出し方の設定が変わって Hub が承認を断ったとき（409 billing_profile_changed）、
+// 応答に付いてきた今の開示で、まだ保留中の同じ確認だけを差し替える。閉じた確認は
+// 生き返らせない。
+export function refreshSpawnConfirmationDisclosure(id: string, parentId: number, message: any): boolean {
+  const previous = pendingSpawnConfirmations.get(id);
+  if (!previous || previous.parentId !== parentId
+    || message?.type !== 'spawn_confirmation_requested'
+    || message?.spawn_confirmation_id !== id || Number(message?.session_id) !== parentId) return false;
+  pendingSpawnConfirmations.set(id, recordFromMessage(message));
+  return true;
 }
 
 // 選んでいる provider で「このフォルダを信頼済みとして登録する」を出すか。

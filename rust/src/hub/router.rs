@@ -1108,13 +1108,17 @@ impl ServiceRouter {
             });
         }
         if super::confirmations::is_confirmation_route(&request.path) {
+            // The dashboard's proof travels with the decision: API key billing
+            // is approved only from the dashboard, never by the Hub token alone.
+            let ui = self.ui_proof(request, now, epoch);
             return Dispatch::response(match (&self.confirmations, &self.tasks, epoch) {
                 (Some(confirmations), Some(tasks), Some(epoch)) => confirmations
                     .handle_authenticated(
                     request,
                     crate::proto::core::VerifiedConfirmationRequest::after_server_authentication(
                         epoch,
-                    ),
+                    )
+                    .with_ui_origin(ui),
                     at,
                     tasks,
                 ),
