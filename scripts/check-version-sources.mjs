@@ -4,7 +4,7 @@
 // The frozen Go release wiring is no longer evidence for a Rust release.
 // This source guard complements actual runner/resource/package tests; it does
 // not prove a binary's stamped version or a hosted release has succeeded.
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,7 +41,18 @@ export function checkVersionWiring(read = (file) => readFileSync(join(repoRoot, 
   return problems;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Compare real paths: Node resolves symlinks/junctions for import.meta.url, so a
+// plain string comparison silently skipped the check when called via a junction.
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun()) {
   const problems = checkVersionWiring();
   if (problems.length) {
     console.error('NG: tag-derived Rust version wiring is broken\n' + problems.map((p) => `  - ${p}`).join('\n'));

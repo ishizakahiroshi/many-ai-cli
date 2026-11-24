@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { countHits, compare } from './check-provider-hardcode.mjs';
 
 test('quoted provider ids are counted; comments, tests and bare words are not', () => {
@@ -44,4 +48,25 @@ test('a pattern key with * pools the files it matches into one allowance', () =>
   assert.deepEqual(ok.errors.map((e) => e.rel), ['web/src/app/c-view.ts']);
   const over = compare(scanned, { 'web/src/app/*-box.ts': { count: 2, reason: 'r' } });
   assert.equal(over.errors[0].rel, 'web/src/app/*-box.ts');
+});
+
+test('a run through a junction or symlink still checks (and fails on a new hit)', () => {
+  const work = mkdtempSync(join(tmpdir(), 'provider-hardcode-link-'));
+  try {
+    const repo = join(work, 'repo');
+    mkdirSync(join(repo, 'scripts'), { recursive: true });
+    mkdirSync(join(repo, 'rust/src'), { recursive: true });
+    copyFileSync(new URL('./check-provider-hardcode.mjs', import.meta.url), join(repo, 'scripts/check-provider-hardcode.mjs'));
+    writeFileSync(join(repo, 'scripts/provider-hardcode-baseline.json'), JSON.stringify({ files: {} }));
+    writeFileSync(join(repo, 'rust/src/lib.rs'), 'fn f() -> &str { "codex" }\n');
+    const link = join(work, 'link');
+    symlinkSync(repo, link, 'junction');
+    for (const root of [repo, link]) {
+      const r = spawnSync(process.execPath, [join(root, 'scripts', 'check-provider-hardcode.mjs')], { encoding: 'utf8' });
+      assert.equal(r.status, 1, `${root}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, /rust\/src\/lib\.rs/);
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 });

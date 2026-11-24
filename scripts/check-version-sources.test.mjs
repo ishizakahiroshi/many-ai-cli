@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { checkVersionWiring } from './check-version-sources.mjs';
 
 function fixture() {
@@ -62,4 +66,22 @@ test('Go-only writers and absent source files cannot satisfy a Rust release', ()
   });
   assert.ok(problems.some((p) => p.includes('formal native runner')));
   assert.ok(problems.some((p) => p.includes('Windows resource linker')));
+});
+
+test('a run through a junction or symlink still checks (and fails when wiring is absent)', () => {
+  const work = mkdtempSync(join(tmpdir(), 'version-sources-link-'));
+  try {
+    const repo = join(work, 'repo');
+    mkdirSync(join(repo, 'scripts'), { recursive: true });
+    copyFileSync(new URL('./check-version-sources.mjs', import.meta.url), join(repo, 'scripts/check-version-sources.mjs'));
+    const link = join(work, 'link');
+    symlinkSync(repo, link, 'junction');
+    for (const root of [repo, link]) {
+      const r = spawnSync(process.execPath, [join(root, 'scripts', 'check-version-sources.mjs')], { encoding: 'utf8' });
+      assert.equal(r.status, 1, `${root}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, /version wiring is broken/);
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 });

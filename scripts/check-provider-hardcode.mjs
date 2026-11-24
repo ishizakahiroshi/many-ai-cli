@@ -32,9 +32,9 @@
 //
 // exit 0 = 問題なし / exit 1 = ブロック。
 
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 export const PROVIDER_IDS = [
   'claude',
@@ -202,4 +202,17 @@ function main() {
   console.log(`check-provider-hardcode: OK（${scanned.size} ファイル・${total} 件が台帳の範囲内）`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();
+// 直接実行かどうかは実体パス（realpath）で比べる。Node は実行するファイルの
+// symlink・ジャンクションを解いて import.meta.url を作るので、文字列のまま比べると
+// ジャンクション・symlink を通したパスで呼んだときに一致せず、
+// 何も検査せずに exit 0 で終わってしまう。
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun()) main();
