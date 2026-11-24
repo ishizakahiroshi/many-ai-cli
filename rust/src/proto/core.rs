@@ -2338,8 +2338,11 @@ impl VerifiedUiOrigin {
 pub struct VerifiedConfirmationRequest {
     auth_epoch: AuthEpoch,
     /// The dashboard's own proof (signed UI cookie, same-origin Fetch Metadata
-    /// and an allowed Origin) came with this request. The Hub token alone,
-    /// which a conductor's shell holds, never sets it (Issue #14).
+    /// and an allowed Origin) came with this request. A request carrying only
+    /// the Hub token never sets it (Issue #14). This is not a strict barrier:
+    /// a local program holding the token can load the dashboard page, receive
+    /// the cookie and send the same headers, so it raises the effort for an
+    /// AI's shell rather than proving a person decided.
     from_ui: bool,
 }
 impl VerifiedConfirmationRequest {
@@ -2359,8 +2362,9 @@ impl VerifiedConfirmationRequest {
     pub fn auth_epoch(&self) -> AuthEpoch {
         self.auth_epoch
     }
-    /// Whether the decision came from the dashboard rather than any holder of
-    /// the Hub token. API key billing accepts only such a decision.
+    /// Whether the decision carried the dashboard's proof rather than the Hub
+    /// token alone. API key billing accepts only such a decision (see
+    /// `from_ui` for what that proof can and cannot rule out).
     pub fn from_ui(&self) -> bool {
         self.from_ui
     }
@@ -2582,10 +2586,13 @@ impl ResolvedChildSpawn {
         }
         let mut decided = self.request.clone();
         decided.apply_human_decision(decision, &proof);
-        // API key billing spends money, so only a decision made in the
-        // dashboard approves it: whether the AI asked for it or the decision
-        // raised a plan login to it. A caller holding only the Hub token (a
-        // conductor's shell) is refused and the confirmation stays pending.
+        // API key billing spends money, so only a decision carrying the
+        // dashboard's proof approves it: whether the AI asked for it or the
+        // decision raised a plan login to it. A caller sending only the Hub
+        // token (a conductor's shell) is refused and the confirmation stays
+        // pending. The proof is not a strict barrier (see `from_ui`); what
+        // bounds the spend is that the person created the profile and that
+        // every such run carries a budget the CLI stops at.
         if decided.billing_mode.trim() == crate::config::headless_billing::API_KEY
             && !proof.from_ui()
         {

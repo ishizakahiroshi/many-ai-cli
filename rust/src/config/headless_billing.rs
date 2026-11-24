@@ -8,6 +8,13 @@
 //! keeps its output. Nothing here runs the command, reads its output, or puts
 //! the command into Debug output, errors, the wire, the database or a log.
 //!
+//! What keeps the spend bounded: API key billing exists only for a profile
+//! the person wrote into that file themselves, every such run needs a
+//! positive budget that is passed to the CLI as `--max-budget-usd`, and its
+//! approval must carry the dashboard's proof (`VerifiedConfirmationRequest::
+//! from_ui`). That proof is not a strict barrier: a local program holding the
+//! Hub token can obtain it too.
+//!
 //! Only a built-in provider whose shipped headless output is Claude Code's
 //! stream-json supports it (the helper, `--bare` and `--max-budget-usd` are
 //! that CLI's). Registered providers and overrides never qualify.
@@ -130,7 +137,7 @@ impl fmt::Display for BillingError {
             }
             Self::UnsupportedVersion => "headless billing Claude Code version is not verified",
             Self::PlanLoginWouldUseKey => {
-                "plan login was selected, but the environment or the Claude settings provide an API key, so the run would be billed to that key; remove it or choose API key billing"
+                "plan login was selected, but the Claude settings provide an API key (apiKeyHelper or env.ANTHROPIC_API_KEY) that could not be switched off for this run alone, so the run was not started to keep it from being billed to that key; remove the key from the Claude settings or choose API key billing"
             }
         })
     }

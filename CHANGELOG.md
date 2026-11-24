@@ -30,17 +30,25 @@ Release artifacts are published at
   waits for a person). The key comes from the command named in the private
   `~/.many-ai-cli/headless-billing.json`, run by Claude Code itself as its
   `apiKeyHelper`; the Hub never runs it, stores a key or keeps raw output of
-  such a run. Only an approval made in the dashboard counts: one sent with the
-  Hub token alone (as a conductor's shell has) is refused. Conflicting
+  such a run. API key billing exists only for a profile you create in that
+  file, and every such run needs a budget above 0, passed to Claude Code as
+  `--max-budget-usd`. The approval must carry the dashboard's proof (its
+  signed cookie and same-origin headers): one sent with the Hub token alone
+  (as a conductor's shell has) is refused. That proof is not a strict
+  barrier, since a local program holding the Hub token can obtain it too, so
+  the profile and the budget are what limit the spend. Conflicting
   credentials, managed policy, another settings root or a Claude Code version
   not yet reviewed (2.1.295 and 2.1.330 are) stop the run before it starts,
   and it is never restarted automatically (#14).
-- **A plan login headless Claude run no longer bills a key silently.** If the
-  environment has a non-empty `ANTHROPIC_API_KEY`, or your user or project
-  Claude settings set `apiKeyHelper` or `env.ANTHROPIC_API_KEY`, the run stops
-  before it starts with a fixed message instead of being billed to that key.
-  Remove it, or pick API key billing for the run. Local model routes are not
-  affected (#14).
+- **A plan login headless Claude run no longer bills a key silently.** A
+  non-empty `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR`) in
+  the environment is removed from that run's environment, and `apiKeyHelper`
+  or `env.ANTHROPIC_API_KEY` in your user or project Claude settings is
+  blanked in the run's own `--settings` for that run only; your settings files
+  are not changed, and runs that use them keep starting. Only when that cannot
+  be done for certain (the run's arguments already pass another `--settings`,
+  or its settings file cannot be written) does the run stop, with a message
+  saying why. Local model routes are not affected (#14).
 - **Sidebar display density** can be switched between Standard and Compact in
   Settings. Compact uses one-line cards, thinner project headings and a
   details popover after a short hover. The selected-session header also shows

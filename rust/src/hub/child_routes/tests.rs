@@ -1215,6 +1215,24 @@ async fn a_plan_login_confirmation_cannot_be_raised_to_api_key_billing_with_the_
     assert_human_required(&error);
     assert_eq!(f.core.pending().len(), 1);
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    // Even from the dashboard, API key billing never starts without a budget
+    // above 0: the spend stays within what the person set for this run.
+    for budget in [None, Some(0.0), Some(-1.0), Some(f64::INFINITY)] {
+        let mut unbounded = approve(Some(&revision), pending.id.clone());
+        unbounded.max_budget_usd = budget;
+        let error = f
+            .core
+            .clone()
+            .accept_decision(unbounded, from_dashboard(), Timestamp::now())
+            .err()
+            .unwrap_or_else(|| panic!("{budget:?} must be refused"));
+        assert!(
+            matches!(error, SessionError::InvalidRequest(_)),
+            "{budget:?}: {error:?}"
+        );
+        assert_eq!(f.core.pending().len(), 1);
+        assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    }
     // A person picking API key billing in the dashboard launches with it.
     let decision = f
         .core

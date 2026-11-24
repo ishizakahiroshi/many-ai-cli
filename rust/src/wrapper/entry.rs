@@ -257,6 +257,20 @@ fn clear_inherited_raw_cmd_bootstrap(process: &mut ProcessPlan) {
         .env
         .insert(super::launch_payload::CMD_RAW_BOOTSTRAP_ENV.into(), None);
 }
+/// A plan login run whose session settings could not be written would be
+/// billed to the key those settings were to switch off: report that reason
+/// instead of the file error (which could name a path).
+fn credential_settings_failed(
+    credential: Option<&launch::billing::SessionCredential<'_>>,
+    error: io::Error,
+) -> io::Error {
+    match credential {
+        Some(launch::billing::SessionCredential::PlanLogin(_)) => {
+            crate::config::headless_billing::BillingError::PlanLoginWouldUseKey.into()
+        }
+        _ => error,
+    }
+}
 #[allow(clippy::too_many_arguments)]
 fn apply_hooks(
     context: &WrapperContext<'_>,
@@ -266,11 +280,13 @@ fn apply_hooks(
     hooks: &mut SessionHooks,
     args: &mut Vec<String>,
     env: &mut BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
-    recipe: Option<&crate::config::headless_billing::PrivateRecipe>,
+    credential: Option<&launch::billing::SessionCredential<'_>>,
 ) -> io::Result<()> {
-    // API key billing (Issue #14): the recipe goes into the same session-owned
-    // settings file as the bounded settings, or into one of its own.
-    let mut recipe_written = false;
+    // Issue #14: the run's credential settings (an API key billing recipe, or
+    // a plan login run's blanks for a key the person's settings provide) go
+    // into the same session-owned settings file as the bounded settings, or
+    // into one of their own.
+    let mut credential_written = false;
     for hook in &launch.required_hooks {
         // A project that widens Claude Code's sandbox would loosen the bounded
         // tier from the repository; refuse and say why (owner's decision B1).
@@ -286,7 +302,7 @@ fn apply_hooks(
         }
         match hook {
             LaunchHook::ClaudeRegistrationSettings { bounded } => match hooks
-                .claude_settings_with_recipe(
+                .claude_settings_with_credential(
                     context.paths,
                     registered,
                     context.executable,
@@ -294,18 +310,21 @@ fn apply_hooks(
                     cfg!(windows),
                     launch.headless,
                     *bounded,
-                    recipe,
+                    credential,
                 ) {
                 Ok(extra) => {
-                    recipe_written = recipe.is_some();
+                    credential_written = credential.is_some();
                     args.extend(extra.args);
                     for (name, value) in extra.env {
                         env.insert(name.into(), Some(value));
                     }
                 }
                 // The bounded tier never starts without the settings that
-                // keep it bounded (U49), nor an API key run without its helper.
-                Err(error) if *bounded || recipe.is_some() => return Err(error),
+                // keep it bounded (U49), nor a run without its credential
+                // settings (an API key run's helper, a plan run's blanks).
+                Err(error) if *bounded || credential.is_some() => {
+                    return Err(credential_settings_failed(credential, error));
+                }
                 Err(_) => eprintln!("wrapper: Claude session settings setup failed"),
             },
             LaunchHook::NoGitHooks => crate::process::git::disable_hooks(env),
@@ -340,17 +359,19 @@ fn apply_hooks(
             }
         }
     }
-    if let Some(recipe) = recipe.filter(|_| !recipe_written) {
-        let extra = hooks.claude_settings_with_recipe(
-            context.paths,
-            registered,
-            context.executable,
-            port,
-            cfg!(windows),
-            launch.headless,
-            false,
-            Some(recipe),
-        )?;
+    if let Some(credential) = credential.filter(|_| !credential_written) {
+        let extra = hooks
+            .claude_settings_with_credential(
+                context.paths,
+                registered,
+                context.executable,
+                port,
+                cfg!(windows),
+                launch.headless,
+                false,
+                Some(credential),
+            )
+            .map_err(|error| credential_settings_failed(Some(credential), error))?;
         args.extend(extra.args);
         for (name, value) in extra.env {
             env.insert(name.into(), Some(value));
@@ -678,23 +699,42 @@ async fn run_headless(
             }
         }
     } else {
-        // Plan login (the default): a provider that could bill a key must not
-        // be billed to one the environment or settings provide (Issue #14).
-        if crate::config::headless_billing::api_key_supported(&launch.provider)
-            && let Err(error) = launch::billing::check_plan_login(
-                context.paths,
-                context.home_dir,
-                context.cwd,
-                context.environment,
-            )
-        {
-            let frame = start_failed(registered.session_id, &error);
-            let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
-            return Err(error);
-        }
         None
     };
-    apply_hooks(
+    // Plan login (the default): a provider that could bill a key must not be
+    // billed to one the environment or settings provide (Issue #14). That key
+    // is switched off for this run only; the run is refused only when that
+    // cannot be done for certain.
+    let plan_override = (!api_billing
+        && crate::config::headless_billing::api_key_supported(&launch.provider))
+    .then(|| {
+        launch::billing::plan_login_override(
+            context.paths,
+            context.home_dir,
+            context.cwd,
+            context.environment,
+        )
+    });
+    let plan_refused = || -> io::Error {
+        crate::config::headless_billing::BillingError::PlanLoginWouldUseKey.into()
+    };
+    if plan_override
+        .as_ref()
+        .is_some_and(|plan| launch::billing::plan_login_override_conflicts(plan, &args))
+    {
+        let error = plan_refused();
+        let frame = start_failed(registered.session_id, &error);
+        let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+        return Err(error);
+    }
+    let credential = match (&recipe, &plan_override) {
+        (Some(recipe), _) => Some(launch::billing::SessionCredential::Helper(recipe)),
+        (None, Some(plan)) if plan.needs_settings() => {
+            Some(launch::billing::SessionCredential::PlanLogin(plan))
+        }
+        _ => None,
+    };
+    let applied = apply_hooks(
         &context,
         &launch,
         &registered,
@@ -702,9 +742,24 @@ async fn run_headless(
         &mut hooks,
         &mut args,
         &mut process.env,
-        recipe.as_ref(),
-    )?;
+        credential.as_ref(),
+    );
     drop(recipe);
+    if let Err(error) = applied {
+        // A plan run whose key could not be switched off says so on screen
+        // (apply_hooks maps its own settings failure to that reason).
+        if plan_override
+            .as_ref()
+            .is_some_and(launch::billing::PlanLoginOverride::needs_settings)
+        {
+            let frame = start_failed(registered.session_id, &error);
+            let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+        }
+        return Err(error);
+    }
+    if let Some(plan) = &plan_override {
+        plan.remove_environment(&mut process.env);
+    }
     if api_billing && let Err(error) = launch::billing::finish_args(&mut args, &launch.billing) {
         let frame = start_failed(registered.session_id, &error);
         let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
@@ -1034,6 +1089,27 @@ mod tests {
         assert_eq!(
             registration_shell("codex", Some(&explicit), None),
             r"C:\PowerShell\pwsh.exe"
+        );
+    }
+    #[test]
+    fn a_plan_run_whose_key_settings_cannot_be_written_says_why_without_the_path() {
+        use crate::config::headless_billing::BillingError;
+        let file_error = || io::Error::other(r"C:\synthetic\claude-settings-9.json: denied");
+        let plan = launch::billing::PlanLoginOverride::default();
+        let mapped = credential_settings_failed(
+            Some(&launch::billing::SessionCredential::PlanLogin(&plan)),
+            file_error(),
+        );
+        assert_eq!(
+            mapped.to_string(),
+            BillingError::PlanLoginWouldUseKey.to_string()
+        );
+        assert!(!mapped.to_string().contains("synthetic"));
+        // Without a plan run's blanks the original error stays.
+        assert!(
+            credential_settings_failed(None, file_error())
+                .to_string()
+                .contains("denied")
         );
     }
 

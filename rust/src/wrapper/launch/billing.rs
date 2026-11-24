@@ -6,9 +6,11 @@
 //! value or provider output into an error. The only process started is
 //! `claude --version` (no inference, no credential use).
 //!
-//! The plan login (the default) gets one narrow check, [`check_plan_login`]:
-//! it stops a run that the environment or the Claude settings would bill to an
-//! API key instead. Nothing else about a plan run changes.
+//! The plan login (the default) gets one narrow step, [`plan_login_override`]:
+//! a key the environment or the Claude settings would bill the run to is
+//! switched off for that run only (removed from the provider's environment,
+//! blanked in the run's own `--settings`). The person's files are not changed.
+//! Nothing else about a plan run changes.
 use super::LaunchPlan;
 use crate::{
     config::{
@@ -20,6 +22,7 @@ use crate::{
     proto::Message,
 };
 use std::{
+    collections::BTreeSet,
     io,
     path::{Path, PathBuf},
     time::Duration,
@@ -308,34 +311,132 @@ pub fn check_auth_files(
     Ok(())
 }
 
+/// Environment variables through which Claude Code takes an API key instead
+/// of the plan login: the key itself, and a file descriptor it reads a key
+/// from. Both are reported as the `ANTHROPIC_API_KEY` source by Claude Code.
+const PLAN_LOGIN_KEY_ENVIRONMENT: &[&str] =
+    &["ANTHROPIC_API_KEY", "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR"];
+
+/// What a plan login run (the default) switches off so it is not billed to
+/// an API key the person did not select for it. Nothing here is written to
+/// the person's files: the environment entries are removed from the
+/// provider's environment only, and the settings entries are blanked in the
+/// run's own session settings (`--settings`), which Claude Code ranks above
+/// the user, project and local settings. Names only; no value is kept.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlanLoginOverride {
+    /// Spellings found in the wrapper's environment with a non-empty value.
+    environment: BTreeSet<String>,
+    /// A user or project settings file sets `apiKeyHelper`.
+    settings_helper: bool,
+    /// Spellings of `env.ANTHROPIC_API_KEY` found in those settings.
+    settings_environment: BTreeSet<String>,
+}
+impl PlanLoginOverride {
+    /// Whether the run needs its own settings to switch a key off.
+    pub fn needs_settings(&self) -> bool {
+        self.settings_helper || !self.settings_environment.is_empty()
+    }
+    /// Removes the key variables from what the provider inherits.
+    pub fn remove_environment(
+        &self,
+        env: &mut std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
+    ) {
+        for name in &self.environment {
+            env.insert(name.into(), None);
+        }
+    }
+    /// Blank values: Claude Code treats an empty `apiKeyHelper` and an empty
+    /// `ANTHROPIC_API_KEY` as not set, so the run falls back to the login.
+    fn insert_settings(&self, settings: &mut serde_json::Map<String, serde_json::Value>) {
+        if self.settings_helper {
+            settings.insert("apiKeyHelper".into(), String::new().into());
+        }
+        if !self.settings_environment.is_empty() {
+            let env = settings
+                .entry("env")
+                .or_insert_with(|| serde_json::Value::Object(Default::default()));
+            if let Some(env) = env.as_object_mut() {
+                for name in self
+                    .settings_environment
+                    .iter()
+                    .map(String::as_str)
+                    .chain(["ANTHROPIC_API_KEY"])
+                {
+                    env.insert(name.into(), String::new().into());
+                }
+            }
+        }
+    }
+}
+
+/// The credential part of a run's session-owned Claude settings.
+pub enum SessionCredential<'a> {
+    /// API key billing: the confirmed key command as `apiKeyHelper`.
+    Helper(&'a PrivateRecipe),
+    /// Plan login: blank out a key the person's own settings provide.
+    PlanLogin(&'a PlanLoginOverride),
+}
+impl SessionCredential<'_> {
+    pub(crate) fn insert_settings(
+        &self,
+        settings: &mut serde_json::Map<String, serde_json::Value>,
+    ) {
+        match self {
+            Self::Helper(recipe) => recipe.insert_settings(settings),
+            Self::PlanLogin(plan) => plan.insert_settings(settings),
+        }
+    }
+}
+
+/// A plan login run whose key could not be switched off for this run: the
+/// provider arguments already name a settings file of their own, so which of
+/// the two Claude Code reads last is not something this wrapper decides.
+pub fn plan_login_override_conflicts(override_: &PlanLoginOverride, args: &[String]) -> bool {
+    override_.needs_settings()
+        && args
+            .iter()
+            .any(|arg| arg == "--settings" || arg.starts_with("--settings="))
+}
+
 /// Plan login (the default) for a provider that supports API key billing:
-/// stops a run that would be billed to an API key the person did not select
-/// for it. Only sources that make Claude Code use a key are looked at: a
-/// non-empty `ANTHROPIC_API_KEY` in the environment, and `apiKeyHelper` or an
+/// finds what would bill the run to an API key the person did not select for
+/// it, so the launch can switch exactly that off for this run instead of
+/// refusing to start. Only sources that make Claude Code use a key are looked
+/// at: a non-empty key variable in the environment, and `apiKeyHelper` or an
 /// `env.ANTHROPIC_API_KEY` in the user or project settings. Names and
-/// emptiness only; no value is read into a message. A route to a local model
-/// clears the key to an empty value and sets its own endpoint, so it passes.
-/// A settings file that cannot
-/// be read or parsed is left to Claude Code as before (this check never makes
-/// a plan run depend on files it did not need until now).
-pub fn check_plan_login(
+/// emptiness only; no value is read. A route to a local model clears the key
+/// to an empty value and sets its own endpoint; its settings are its own. A
+/// settings file that cannot be read or parsed is left to Claude Code as
+/// before (this never makes a plan run depend on files it did not need).
+pub fn plan_login_override(
     paths: &RuntimePaths,
     home: &Path,
     cwd: &Path,
     environment: &[String],
-) -> io::Result<()> {
-    let refuse = || io::Error::from(BillingError::PlanLoginWouldUseKey);
-    if env(environment, "ANTHROPIC_API_KEY").is_some_and(|value| !value.is_empty()) {
-        return Err(refuse());
-    }
+) -> PlanLoginOverride {
+    let mut found = PlanLoginOverride {
+        environment: environment
+            .iter()
+            .filter_map(|entry| entry.split_once('='))
+            .filter(|(key, value)| {
+                !value.is_empty()
+                    && PLAN_LOGIN_KEY_ENVIRONMENT
+                        .iter()
+                        .any(|name| key.eq_ignore_ascii_case(name))
+            })
+            .map(|(key, _)| key.to_owned())
+            .collect(),
+        ..Default::default()
+    };
     // A run sent to another endpoint (a local model route) is not billed to
     // the Anthropic plan or a key either way; its settings are its own.
     if env(environment, "ANTHROPIC_BASE_URL").is_some_and(|value| !value.is_empty()) {
-        return Ok(());
+        return found;
     }
     let config = match env(environment, "CLAUDE_CONFIG_DIR") {
         Some(path) if Path::new(path).is_absolute() => PathBuf::from(path),
-        Some(_) => return Ok(()),
+        Some(_) => return found,
         None => home.join(".claude"),
     };
     let mut files: Vec<PathBuf> = ["settings.json", "settings.local.json"]
@@ -358,38 +459,42 @@ pub fn check_plan_login(
             break;
         }
     }
-    if files.iter().any(|path| settings_provide_a_key(paths, path)) {
-        return Err(refuse());
+    for path in &files {
+        settings_provide_a_key(paths, path, &mut found);
     }
-    Ok(())
+    found
 }
 
-fn settings_provide_a_key(paths: &RuntimePaths, path: &Path) -> bool {
+fn settings_provide_a_key(paths: &RuntimePaths, path: &Path, found: &mut PlanLoginOverride) {
     if paths.is_trial() && paths.relative_to_selected_root(path).is_err() {
-        return false;
+        return;
     }
     let (Some(parent), Some(name)) = (path.parent(), path.file_name().and_then(|v| v.to_str()))
     else {
-        return false;
+        return;
     };
     let Ok(bytes) = Dir::open(parent).and_then(|directory| directory.read(name, 128 * 1024)) else {
-        return false;
+        return;
     };
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        return false;
+        return;
     };
-    value
+    if value
         .get("apiKeyHelper")
         .is_some_and(|helper| !helper.is_null())
-        || value
-            .get("env")
-            .and_then(serde_json::Value::as_object)
-            .is_some_and(|env| {
-                env.iter().any(|(key, value)| {
+    {
+        found.settings_helper = true;
+    }
+    if let Some(env) = value.get("env").and_then(serde_json::Value::as_object) {
+        found.settings_environment.extend(
+            env.iter()
+                .filter(|(key, value)| {
                     key.eq_ignore_ascii_case("ANTHROPIC_API_KEY")
                         && value.as_str().is_none_or(|value| !value.is_empty())
                 })
-            })
+                .map(|(key, _)| key.clone()),
+        );
+    }
 }
 
 #[cfg(windows)]

@@ -274,58 +274,104 @@ fn initial_config_root_is_supported_but_a_nested_root_override_is_refused() {
 }
 
 /// Plan login is the default: a key the environment or settings provide would
-/// bill the run to it, so the run stops instead. Synthetic names and values.
+/// bill the run to it, so that key is switched off for this run instead of
+/// refusing it. Synthetic names and values; the person's files are unchanged.
 #[test]
-fn a_plan_login_run_stops_when_a_key_would_bill_it_instead() {
+fn a_plan_login_run_switches_off_a_key_that_would_bill_it_instead() {
     let (root, _installed, paths) = trial();
     let home = root.path().join("home");
     let cwd = root.path().join("project");
     std::fs::create_dir_all(home.join(".claude")).unwrap();
     std::fs::create_dir(&cwd).unwrap();
-    let plan = |environment: &[String]| check_plan_login(&paths, &home, &cwd, environment);
-    let refused = |result: io::Result<()>| {
-        result.unwrap_err().to_string() == BillingError::PlanLoginWouldUseKey.to_string()
+    let plan = |environment: &[String]| plan_login_override(&paths, &home, &cwd, environment);
+    let removed = |found: &PlanLoginOverride| {
+        let mut env = std::collections::BTreeMap::new();
+        found.remove_environment(&mut env);
+        env.into_iter()
+            .map(|(name, value)| {
+                assert!(value.is_none());
+                name.to_string_lossy().into_owned()
+            })
+            .collect::<Vec<_>>()
     };
-    // Nothing set: the plan run starts as before. The plan's own login token,
-    // a debug switch or another config root are not a key.
-    assert!(plan(&[]).is_ok());
-    assert!(
+    // Nothing set: the plan run starts exactly as before. The plan's own login
+    // token, a debug switch or an empty key are not a key.
+    assert_eq!(plan(&[]), PlanLoginOverride::default());
+    assert_eq!(
         plan(&[
             "CLAUDE_CODE_OAUTH_TOKEN=synthetic".into(),
             "DEBUG=1".into(),
             "ANTHROPIC_API_KEY=".into(),
-        ])
-        .is_ok()
+        ]),
+        PlanLoginOverride::default()
     );
-    // A key in the environment.
-    let error = plan(&["ANTHROPIC_API_KEY=synthetic-not-a-key".into()]).unwrap_err();
-    assert!(!error.to_string().contains("synthetic-not-a-key"));
-    assert!(refused(Err(error)));
-    // A local model route clears the key and sets its own endpoint.
-    assert!(
+    // A key in the environment is removed from what the provider inherits;
+    // no settings file is needed for that.
+    let found = plan(&[
+        "ANTHROPIC_API_KEY=synthetic-not-a-key".into(),
+        "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR=9".into(),
+    ]);
+    assert!(!found.needs_settings());
+    assert_eq!(
+        removed(&found),
+        ["ANTHROPIC_API_KEY", "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR"]
+    );
+    assert!(!format!("{found:?}").contains("synthetic-not-a-key"));
+    // A local model route clears the key and sets its own endpoint: kept.
+    assert_eq!(
         plan(&[
             "ANTHROPIC_AUTH_TOKEN=synthetic".into(),
             "ANTHROPIC_API_KEY=".into(),
             "ANTHROPIC_BASE_URL=http://127.0.0.1:9".into(),
-        ])
-        .is_ok()
+        ]),
+        PlanLoginOverride::default()
     );
-    // A key helper or key in the user settings.
-    for settings in [
-        serde_json::json!({"apiKeyHelper": "synthetic-do-not-execute"}),
-        serde_json::json!({"env": {"ANTHROPIC_API_KEY": "synthetic"}}),
+    // A key helper or key in the user settings is blanked in the run's own
+    // settings, which Claude Code ranks above the user and project settings.
+    let user_settings = home.join(".claude/settings.json");
+    for (settings, helper, env) in [
+        (
+            serde_json::json!({"apiKeyHelper": "synthetic-do-not-execute"}),
+            true,
+            false,
+        ),
+        (
+            serde_json::json!({"env": {"ANTHROPIC_API_KEY": "synthetic"}}),
+            false,
+            true,
+        ),
     ] {
-        std::fs::write(
-            home.join(".claude/settings.json"),
-            serde_json::to_vec(&settings).unwrap(),
-        )
-        .unwrap();
-        assert!(refused(plan(&[])), "{settings}");
+        let original = serde_json::to_vec(&settings).unwrap();
+        std::fs::write(&user_settings, &original).unwrap();
+        let found = plan(&[]);
+        assert!(found.needs_settings(), "{settings}");
+        let mut doc = serde_json::Map::new();
+        SessionCredential::PlanLogin(&found).insert_settings(&mut doc);
+        assert_eq!(doc.contains_key("apiKeyHelper"), helper, "{settings}");
+        if helper {
+            assert_eq!(doc["apiKeyHelper"], "");
+        }
+        if env {
+            assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "");
+        }
+        assert!(!serde_json::to_string(&doc).unwrap().contains("synthetic"));
+        // The person's file is read, never written.
+        assert_eq!(std::fs::read(&user_settings).unwrap(), original);
     }
+    // Another spelling of the name is blanked as written as well.
+    std::fs::write(
+        &user_settings,
+        r#"{"env":{"anthropic_api_key":"synthetic"}}"#,
+    )
+    .unwrap();
+    let mut doc = serde_json::Map::new();
+    SessionCredential::PlanLogin(&plan(&[])).insert_settings(&mut doc);
+    assert_eq!(doc["env"]["anthropic_api_key"], "");
+    assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "");
     // Other settings, and a file that does not parse, are left as before.
     for settings in [r#"{"model":"synthetic"}"#, "{not json"] {
-        std::fs::write(home.join(".claude/settings.json"), settings).unwrap();
-        assert!(plan(&[]).is_ok(), "{settings}");
+        std::fs::write(&user_settings, settings).unwrap();
+        assert_eq!(plan(&[]), PlanLoginOverride::default(), "{settings}");
     }
     // A project's settings above cwd count too.
     std::fs::create_dir_all(root.path().join(".claude")).unwrap();
@@ -334,9 +380,75 @@ fn a_plan_login_run_stops_when_a_key_would_bill_it_instead() {
         r#"{"apiKeyHelper":"synthetic-do-not-execute"}"#,
     )
     .unwrap();
-    assert!(refused(plan(&[])));
+    let found = plan(&[]);
+    assert!(found.needs_settings());
+    // Only when the provider arguments already carry a settings file of their
+    // own can the key not be switched off for certain: then the run stops.
+    assert!(!plan_login_override_conflicts(
+        &found,
+        &["--model".into(), "x".into()]
+    ));
+    for args in [
+        vec!["--settings".to_owned(), "other.json".to_owned()],
+        vec!["--settings=other.json".to_owned()],
+    ] {
+        assert!(plan_login_override_conflicts(&found, &args));
+    }
+    // Nothing to switch off in settings, nothing to conflict with.
+    assert!(!plan_login_override_conflicts(
+        &PlanLoginOverride::default(),
+        &["--settings".into(), "other.json".into()]
+    ));
     std::fs::remove_file(root.path().join(".claude/settings.local.json")).unwrap();
-    assert!(plan(&[]).is_ok());
+    assert_eq!(plan(&[]), PlanLoginOverride::default());
+}
+
+/// The plan run's blanks go into the one session-owned settings file, with
+/// the bounded settings when that tier also needs them.
+#[test]
+fn a_plan_login_override_shares_the_one_session_settings_file() {
+    let (root, _installed, paths) = trial();
+    let home = root.path().join("home");
+    let cwd = root.path().join("project");
+    std::fs::create_dir_all(home.join(".claude")).unwrap();
+    std::fs::create_dir(&cwd).unwrap();
+    std::fs::write(
+        home.join(".claude/settings.json"),
+        r#"{"apiKeyHelper":"synthetic-do-not-execute","env":{"ANTHROPIC_API_KEY":"synthetic"}}"#,
+    )
+    .unwrap();
+    let found = plan_login_override(&paths, &home, &cwd, &[]);
+    let registered = registered_with(None);
+    let mut hooks = SessionHooks::default();
+    let extra = hooks
+        .claude_settings_with_credential(
+            &paths,
+            &registered,
+            Path::new("/synthetic/many-ai-cli"),
+            49001,
+            true,
+            true,
+            true,
+            Some(&SessionCredential::PlanLogin(&found)),
+        )
+        .unwrap();
+    assert_eq!(extra.args.iter().filter(|v| *v == "--settings").count(), 1);
+    let file = PathBuf::from(&extra.args[1]);
+    let settings: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    assert_eq!(settings["apiKeyHelper"], "");
+    assert_eq!(settings["env"]["ANTHROPIC_API_KEY"], "");
+    assert_eq!(
+        settings["permissions"]["blockWritesOutsideWorkingDirectories"],
+        true
+    );
+    assert!(
+        !String::from_utf8(std::fs::read(&file).unwrap())
+            .unwrap()
+            .contains("synthetic")
+    );
+    hooks.finish().unwrap();
+    assert!(!file.exists());
 }
 
 #[test]
@@ -466,7 +578,7 @@ async fn api_prepare_merges_one_owned_settings_file_without_running_the_recipe()
     let mut hooks = SessionHooks::default();
     let mut args = plan.provider_args.clone();
     let extra = hooks
-        .claude_settings_with_recipe(
+        .claude_settings_with_credential(
             &paths,
             &registered,
             Path::new("/synthetic/many-ai-cli"),
@@ -474,7 +586,7 @@ async fn api_prepare_merges_one_owned_settings_file_without_running_the_recipe()
             cfg!(windows),
             true,
             false,
-            Some(&recipe),
+            Some(&SessionCredential::Helper(&recipe)),
         )
         .unwrap();
     args.extend(extra.args);

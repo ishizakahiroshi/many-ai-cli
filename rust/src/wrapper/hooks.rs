@@ -271,7 +271,7 @@ impl SessionHooks {
         headless: bool,
         bounded: bool,
     ) -> io::Result<ClaudeLaunch> {
-        self.claude_settings_with_recipe(
+        self.claude_settings_with_credential(
             paths,
             registered,
             executable,
@@ -282,13 +282,15 @@ impl SessionHooks {
             None,
         )
     }
-    /// Like [`Self::claude_settings`], also carrying an API key billing recipe
-    /// as `apiKeyHelper` (Issue #14) in the same session-owned private file, so
-    /// the launch passes exactly one `--settings`. The file is removed with the
+    /// Like [`Self::claude_settings`], also carrying the run's credential
+    /// settings (Issue #14) in the same session-owned private file, so the
+    /// launch passes exactly one `--settings`: an API key billing recipe as
+    /// `apiKeyHelper`, or for a plan login run the blanks that switch off a key
+    /// the person's own settings provide. The file is removed with the
     /// session; leftovers are collected on a later start. The recipe never
     /// reaches argv, the environment or an error.
     #[allow(clippy::too_many_arguments)]
-    pub fn claude_settings_with_recipe(
+    pub fn claude_settings_with_credential(
         &mut self,
         paths: &RuntimePaths,
         registered: &Message,
@@ -297,16 +299,16 @@ impl SessionHooks {
         native_windows: bool,
         headless: bool,
         bounded: bool,
-        recipe: Option<&crate::config::headless_billing::PrivateRecipe>,
+        credential: Option<&super::launch::billing::SessionCredential<'_>>,
     ) -> io::Result<ClaudeLaunch> {
         let statusbar = !headless && registered.token_statusbar;
         let cross = !headless && registered.auto && !registered.orchestration_id.is_empty();
-        if !statusbar && !cross && !bounded && recipe.is_none() {
+        if !statusbar && !cross && !bounded && credential.is_none() {
             return Ok(ClaudeLaunch::default());
         }
         let mut doc = serde_json::Map::new();
-        if let Some(recipe) = recipe {
-            recipe.insert_settings(&mut doc);
+        if let Some(credential) = credential {
+            credential.insert_settings(&mut doc);
         }
         let mut env = Vec::new();
         if statusbar {
