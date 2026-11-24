@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "207b778c6a06adbadeae5f56695d4ec24fb2a90b",
+    "commit": "9a909222684c7df90dd3f87f91399524c7a18a02",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2148,
-    "analyzed": 1686,
+    "discovered": 2150,
+    "analyzed": 1688,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -49428,6 +49428,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/spawn-permission-label.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "起動パネルの許可モード「auto」「bypassPermissions」の文言を選ぶ。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/spawn-provider-options.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -53390,6 +53420,36 @@
     },
     {
       "path": "web/tests/spawn-model-groups.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/spawn-permission-label.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

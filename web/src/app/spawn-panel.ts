@@ -13,6 +13,7 @@ import { hasProviderCapability, loadProviderSummaries } from './provider-store.j
 import { providerIsAcp, providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
+import { permissionLabelText } from './spawn-permission-label.js';
 import { orchestrationCliOptions, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
@@ -1194,16 +1195,10 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     return providerPermissionChoices(p).length > 0;
   }
 
-  // 「auto」「bypassPermissions」の文言。provider 専用の訳があればそれ、無ければ共通の文言。
-  // 訳の名前は spawn_permission_<種類>_<id（- は _）>。cursor-agent だけは cursor で持っている。
+  // 「auto」「bypassPermissions」の文言。同梱の CLI は専用の訳があればそれ、無ければ共通の文言。
+  // 登録型は id が同梱の CLI に似ていても共通の文言（spawn-permission-label.ts）。
   function permissionLabel(kind: 'auto' | 'bypass', p: string): string {
-    const base = `spawn_permission_${kind}`;
-    const suffix = p.replace(/-/g, '_');
-    for (const key of [`${base}_${suffix}`, ...(suffix.startsWith('cursor') ? [`${base}_cursor`] : [])]) {
-      const text = t(key);
-      if (text && text !== key) return text;
-    }
-    return t(base);
+    return permissionLabelText(kind, p, (key) => t(key));
   }
 
   function permissionAutoLabel(p: string): string {
