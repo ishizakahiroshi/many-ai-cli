@@ -1578,10 +1578,17 @@ impl ServiceRouter {
                     if p == "/api/providers/" {
                         Response::error(404, "not_found", "provider endpoint not found")
                     } else if let Some(providers) = &self.providers {
+                        // A built-in's definition changes only with the dashboard's proof.
+                        let ui = self.ui_proof(
+                            request,
+                            now,
+                            self.core.as_ref().map(|core| core.auth_epoch()),
+                        );
                         super::provider_routes::handle(
                             request,
                             &providers.store,
                             &self.paths,
+                            ui.as_ref(),
                             providers.command_found.as_ref(),
                             providers.warning.as_ref(),
                         )

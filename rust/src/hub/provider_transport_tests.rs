@@ -229,8 +229,17 @@ fn broadcasts(effects: &CoreEffects) -> Vec<crate::proto::Message> {
         })
         .collect()
 }
-#[test]
-fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
+/// A router with a live session core (so it can issue the dashboard's proof)
+/// and the provider routes, on a synthetic trial root.
+struct CoreRouter {
+    core: Arc<crate::terminal::session::SessionEngine>,
+    sockets: Arc<crate::hub::sockets::SocketRegistry>,
+    store: Arc<ProviderRegistryStore>,
+    router: ServiceRouter,
+    // Last: on Windows the folder cannot go while a field above holds a file.
+    _root: tempfile::TempDir,
+}
+fn core_router(port: u16, token: &str) -> CoreRouter {
     use crate::{
         hub::sockets::{EffectDriver, SocketRegistry},
         proto::core::SessionCore,
@@ -243,15 +252,15 @@ fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
     let root = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(
         root.path(),
-        49893,
-        &root.path().join("../installed-provider-broadcast"),
+        port,
+        &root.path().join("../installed-provider-core-router"),
     )
     .unwrap();
     let config = Arc::new(
         ConfigStore::new(
             paths.clone(),
             Config {
-                token: "synthetic-broadcast-token".into(),
+                token: token.into(),
                 ..Default::default()
             },
         )
@@ -280,6 +289,31 @@ fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
     ));
     let trait_core: Arc<dyn SessionCore> = core.clone();
     sockets.bind_core(Arc::downgrade(&trait_core)).unwrap();
+    let store = Arc::new(ProviderRegistryStore::new(&paths, config.clone()).unwrap());
+    let router = ServiceRouter::new(config, paths, trait_core, port)
+        .unwrap()
+        .with_provider_routes(
+            store.clone(),
+            Arc::new(|_| true),
+            Arc::new(|_, _, _| panic!("unexpected provider warning")),
+        );
+    CoreRouter {
+        _root: root,
+        core,
+        sockets,
+        store,
+        router,
+    }
+}
+#[test]
+fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
+    let CoreRouter {
+        _root,
+        core,
+        sockets,
+        store,
+        router,
+    } = core_router(49893, "synthetic-broadcast-token");
     let ui = crate::proto::core::UiBinding {
         connection: sockets.next_ui().unwrap(),
         auth_epoch: core.auth_epoch(),
@@ -287,24 +321,16 @@ fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
     sockets.insert_ui(ui, Box::new(NullUi)).unwrap();
     core.attach_ui(ui, None, None).unwrap();
     assert!(core.finish_ui_priming(ui).unwrap().0.is_empty());
-    let store = Arc::new(ProviderRegistryStore::new(&paths, config.clone()).unwrap());
     let changed: Arc<std::sync::Mutex<Vec<(String, &'static str)>>> = Default::default();
-    let router = ServiceRouter::new(config, paths, trait_core.clone(), 49893)
-        .unwrap()
-        .with_provider_routes(
-            store.clone(),
-            Arc::new(|_| true),
-            Arc::new(|_, _, _| panic!("unexpected provider warning")),
-        )
-        .with_provider_changed({
-            let changed = changed.clone();
-            Arc::new(move |change| {
-                changed
-                    .lock()
-                    .unwrap()
-                    .push((change.id.clone(), change.action));
-            })
-        });
+    let router = router.with_provider_changed({
+        let changed = changed.clone();
+        Arc::new(move |change| {
+            changed
+                .lock()
+                .unwrap()
+                .push((change.id.clone(), change.action));
+        })
+    });
     let call = |method: &str, path: &str, query: &str, body: Value| {
         let request = Request {
             method: method.into(),
@@ -363,4 +389,104 @@ fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
             ("fixture-bcast".to_owned(), "removed")
         ]
     );
+}
+
+#[test]
+fn a_builtin_definition_changes_only_with_the_dashboards_proof() {
+    let CoreRouter {
+        _root,
+        store,
+        router,
+        ..
+    } = core_router(49894, "synthetic-ui-proof-token");
+    let request = |method: &str, path: &str, headers: Vec<(String, String)>, body: Value| Request {
+        method: method.into(),
+        path: path.into(),
+        query: "token=synthetic-ui-proof-token".into(),
+        host: "127.0.0.1:49894".into(),
+        remote_addr: "127.0.0.1:50001".into(),
+        headers,
+        body: serde_json::to_vec(&body).unwrap(),
+        ..Default::default()
+    };
+    // The dashboard page hands the browser its signed UI cookie.
+    let page = router
+        .handle(&request("GET", "/", vec![], json!(null)), 1)
+        .response;
+    assert_eq!(page.status, 200);
+    let cookie = page
+        .cookies
+        .iter()
+        .find(|c| c.starts_with(super::pin::UI_ORIGIN_COOKIE))
+        .and_then(|c| c.split(';').next())
+        .unwrap()
+        .to_owned();
+    let dashboard = vec![
+        ("Cookie".to_owned(), cookie),
+        ("Sec-Fetch-Site".to_owned(), "same-origin".to_owned()),
+        ("Origin".to_owned(), "http://127.0.0.1:49894".to_owned()),
+    ];
+    let current = |store: &ProviderRegistryStore| {
+        store
+            .snapshot()
+            .unwrap()
+            .registry
+            .lookup("claude")
+            .unwrap()
+            .definition
+    };
+    let shipped = current(&store);
+    let mut swapped = shipped.clone();
+    swapped.launch.as_mut().unwrap().executable = "synthetic-other-executable".into();
+    let edit = |headers: Vec<(String, String)>, definition: &crate::proto::provider::Definition| {
+        request(
+            "PATCH",
+            "/api/providers/claude",
+            headers,
+            json!({"expected_revision":"","definition":definition}),
+        )
+    };
+    // A caller that holds only the token cannot change a built-in's launch.
+    let refused = router.handle(&edit(vec![], &swapped), 1);
+    assert_eq!(refused.response.status, 403);
+    let body: Value = serde_json::from_slice(&refused.response.body).unwrap();
+    assert_eq!(body["error"], "ui_required");
+    assert!(refused.effects.0.is_empty());
+    assert!(store.history.current("claude").is_err());
+    assert_eq!(
+        current(&store).launch.unwrap().executable,
+        shipped.launch.clone().unwrap().executable
+    );
+    // Nor disable or reset it.
+    let disable = request("DELETE", "/api/providers/claude", vec![], json!(null));
+    let disable = Request {
+        query: format!("{}&expected_revision=", disable.query),
+        ..disable
+    };
+    assert_eq!(router.handle(&disable, 1).response.status, 403);
+    let reset = request(
+        "POST",
+        "/api/providers/claude/reset",
+        vec![],
+        json!({"expected_revision":""}),
+    );
+    assert_eq!(router.handle(&reset, 1).response.status, 403);
+    assert!(store.history.current("claude").is_err());
+    // Reading it still needs only the token.
+    assert_eq!(
+        router
+            .handle(
+                &request("GET", "/api/providers/claude", vec![], json!(null)),
+                1
+            )
+            .response
+            .status,
+        200
+    );
+    // The dashboard's own save goes through as before.
+    let mut renamed = shipped.clone();
+    renamed.display_name = "Edited from the dashboard".into();
+    let saved = router.handle(&edit(dashboard, &renamed), 1);
+    assert_eq!(saved.response.status, 200, "{:?}", saved.response.body);
+    assert_eq!(current(&store).display_name, "Edited from the dashboard");
 }

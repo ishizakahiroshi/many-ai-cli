@@ -28,6 +28,14 @@ pub fn valid_id(id: &str) -> Result<(), String> {
     }
     Ok(())
 }
+/// Whether a provider name a wrapper reports to the Hub (when it registers or
+/// reattaches) has the shape the registration check allows: what `valid_id`
+/// accepts, or the shell launch identity a plain shell session uses. The Hub
+/// refuses any other name before it reaches log file names, history or the
+/// screen.
+pub fn valid_session_provider(name: &str) -> bool {
+    name == "shell" || valid_id(name).is_ok()
+}
 fn text(value: &str, field: &str, required: bool) -> Result<(), String> {
     if required && value.trim().is_empty() {
         return Err(format!("{field} is required"));

@@ -334,14 +334,20 @@ impl WebSocketService {
             let closed = self.sockets.reserve_wrapper(connection, writer)?;
             let requested = first.session_id;
             let reattach = first.r#type == "reattach";
-            let restored_metadata = if reattach {
+            // The provider name comes from the wrapper: only the shape the
+            // registration check allows reaches the session, its log file
+            // names, history or the screen.
+            let provider_ok = crate::profile::validation::valid_session_provider(&first.provider);
+            let restored_metadata = if reattach && provider_ok {
                 self.registration_preparation
                     .as_ref()
                     .and_then(|owner| owner.restored_metadata(&first))
             } else {
                 None
             };
-            let registration = if reattach {
+            let registration = if !provider_ok {
+                Err(SessionError::InvalidRequest(INVALID_PROVIDER.into()))
+            } else if reattach {
                 self.core
                     .reattach(
                         ReattachRequest {
@@ -793,13 +799,17 @@ fn registration_proof(request: &Request) -> Result<Option<String>, SessionError>
     }
     Ok(Some(claim.clone()))
 }
+/// The refusal of a register or reattach whose provider name does not have the
+/// shape of a provider id. A reattaching wrapper gets it as `reattach_reject`,
+/// so it stops retrying a name the Hub will never take.
+const INVALID_PROVIDER: &str = "invalid provider";
 fn reattach_rejection(requested: i64, error: &SessionError) -> Option<proto::Message> {
     let SessionError::InvalidRequest(reason) = error else {
         return None;
     };
     if !matches!(
         reason.as_str(),
-        "invalid session_id" | "session dismissed" | "invalid replay_b64"
+        "invalid session_id" | "session dismissed" | "invalid replay_b64" | INVALID_PROVIDER
     ) {
         return None;
     }

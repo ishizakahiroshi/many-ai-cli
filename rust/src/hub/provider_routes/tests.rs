@@ -233,8 +233,25 @@ fn request(method: &str, path: &str, body: serde_json::Value) -> Request {
         ..Default::default()
     }
 }
+/// What the router hands over for a request the signed-in dashboard sent.
+fn dashboard() -> VerifiedUiOrigin {
+    VerifiedUiOrigin::after_server_verification(crate::proto::core::AuthEpoch(1))
+}
+/// A request from the dashboard (the screen's own calls).
 fn response(request: &Request, store: &ProviderRegistryStore, paths: &RuntimePaths) -> Response {
-    handle(request, store, paths, &|_| true, &|_, _, _| {}).unwrap()
+    handle(
+        request,
+        store,
+        paths,
+        Some(&dashboard()),
+        &|_| true,
+        &|_, _, _| {},
+    )
+    .unwrap()
+}
+/// A request that holds only the Hub token (a session, `orchestrate`, the CLI).
+fn token_only(request: &Request, store: &ProviderRegistryStore, paths: &RuntimePaths) -> Response {
+    handle(request, store, paths, None, &|_| true, &|_, _, _| {}).unwrap()
 }
 fn value(response: &Response) -> serde_json::Value {
     serde_json::from_slice(&response.body).unwrap()
@@ -591,7 +608,7 @@ fn go_wire_patch_folds_merges_duplicate_and_null_fields() {
 fn command_missing_read_diagnostic_and_real_reset_route_use_history() {
     let (_temp, paths, store) = setup();
     let req = request("GET", "/api/providers", json!(null));
-    let result = handle(&req, &store, &paths, &|_| false, &|_, _, _| {}).unwrap();
+    let result = handle(&req, &store, &paths, None, &|_| false, &|_, _, _| {}).unwrap();
     assert!(
         value(&result)["diagnostics"]
             .as_array()
@@ -688,6 +705,7 @@ fn filesystem_warning_is_private_and_runs_after_mutation_lock_release() {
         ),
         &store,
         &paths,
+        None,
         &|_| true,
         &warning,
     )
@@ -865,6 +883,124 @@ fn the_declarations_route_gives_the_screen_every_providers_declared_values() {
     for entry in list {
         assert!(entry.get("launch").is_none(), "{}", entry["id"]);
     }
+}
+
+#[test]
+fn a_token_only_caller_cannot_change_a_builtin_definition() {
+    let (_temp, paths, store) = setup();
+    let shipped = store
+        .snapshot()
+        .unwrap()
+        .registry
+        .lookup("claude")
+        .unwrap()
+        .definition;
+    let mut swapped = shipped.clone();
+    swapped.launch.as_mut().unwrap().executable = "synthetic-other-executable".into();
+    let mut delete = request("DELETE", "/api/providers/claude", json!(null));
+    delete.query = "expected_revision=".into();
+    for refused in [
+        request(
+            "PATCH",
+            "/api/providers/claude",
+            json!({"expected_revision":"","definition":swapped}),
+        ),
+        delete,
+        request(
+            "POST",
+            "/api/providers/claude/reset",
+            json!({"expected_revision":""}),
+        ),
+        request(
+            "POST",
+            "/api/providers/claude/restore",
+            json!({"revision":"synthetic","expected_revision":"synthetic"}),
+        ),
+        request(
+            "POST",
+            "/api/providers/claude/backups/synthetic/restore",
+            json!({"expected_revision":""}),
+        ),
+        request(
+            "POST",
+            "/api/providers/claude/recovery",
+            json!({"revision":""}),
+        ),
+    ] {
+        let reply = token_only(&refused, &store, &paths);
+        assert_eq!(reply.status, 403, "{} {}", refused.method, refused.path);
+        assert_eq!(value(&reply)["error"], "ui_required");
+        assert_eq!(change_of(&refused, &reply), None);
+    }
+    assert!(store.history.current("claude").is_err());
+    let now = store
+        .snapshot()
+        .unwrap()
+        .registry
+        .lookup("claude")
+        .unwrap()
+        .definition;
+    assert!(now.launch == shipped.launch);
+    assert_eq!(now.enabled, shipped.enabled);
+    // Reads of a built-in still need only the token.
+    for read in [
+        "/api/providers/claude",
+        "/api/providers/claude/history",
+        "/api/providers/claude/recovery",
+        "/api/providers/claude/backups",
+    ] {
+        assert_ne!(
+            token_only(&request("GET", read, json!(null)), &store, &paths).status,
+            403,
+            "{read}"
+        );
+    }
+    // The same edit from the dashboard is saved.
+    let mut renamed = shipped;
+    renamed.display_name = "Edited from the dashboard".into();
+    let saved = response(
+        &request(
+            "PATCH",
+            "/api/providers/claude",
+            json!({"expected_revision":"","definition":renamed}),
+        ),
+        &store,
+        &paths,
+    );
+    assert_eq!(saved.status, 200);
+}
+
+#[test]
+fn a_registered_provider_keeps_its_token_only_routes() {
+    let (_temp, paths, store) = setup();
+    let created = token_only(
+        &request(
+            "POST",
+            "/api/providers",
+            serde_json::to_value(definition("token-cli")).unwrap(),
+        ),
+        &store,
+        &paths,
+    );
+    assert_eq!(created.status, 201);
+    let mut desired = definition("token-cli");
+    desired.display_name = "Changed by token".into();
+    let changed = token_only(
+        &request(
+            "PATCH",
+            "/api/providers/token-cli",
+            json!({"expected_revision":store.snapshot().unwrap().registry.revision(),"definition":desired}),
+        ),
+        &store,
+        &paths,
+    );
+    assert_eq!(changed.status, 200);
+    let mut delete = request("DELETE", "/api/providers/token-cli", json!(null));
+    delete.query = format!(
+        "expected_revision={}",
+        store.snapshot().unwrap().registry.revision()
+    );
+    assert_eq!(token_only(&delete, &store, &paths).status, 200);
 }
 
 #[test]

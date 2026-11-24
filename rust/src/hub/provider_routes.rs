@@ -1,6 +1,14 @@
 //! Provider CRUD, validation, revision, backup and recovery routes. The router
 //! must apply its full token/Host/Origin guard before dispatching here.
 //! Distribution acceptance and icon upload/serving have separate owners.
+//!
+//! Changing the definition of a built-in AI CLI (edit, disable, reset, restore
+//! a revision or a backup, recover) also needs the dashboard's proof
+//! (`VerifiedUiOrigin`: the signed UI cookie, Fetch Metadata and Origin). The
+//! Hub itself runs a built-in's launch and version commands (`cli_version`), so
+//! a caller that holds only the Hub token (any program inside a session) must
+//! not be able to point them at another executable. Registered (not built-in)
+//! ids keep their token-only routes.
 use super::http::{Request, Response, decode_json};
 use crate::{
     config::{Resource, RuntimePaths},
@@ -10,7 +18,7 @@ use crate::{
         store::{ProviderRegistryStore, ProviderSnapshot, StoreError, is_builtin},
         validation::validate_definition,
     },
-    proto::{provider::*, wire::GoWire},
+    proto::{core::VerifiedUiOrigin, provider::*, wire::GoWire},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -296,18 +304,34 @@ fn query_has(request: &Request, name: &str) -> bool {
         })
 }
 
+/// Whether this request would change the definition of a built-in AI CLI.
+/// `path` is the part after `/api/providers/`. Reads, `validate`, and every
+/// request about a registered id answer `false`.
+fn changes_builtin_definition(request: &Request, path: &str) -> bool {
+    let parts = path.split('/').collect::<Vec<_>>();
+    let changes = matches!(
+        (request.method.as_str(), parts.as_slice()),
+        ("PATCH" | "DELETE", [_])
+            | ("POST", [_, "reset" | "restore" | "recovery"])
+            | ("POST", [_, "backups", _, "restore"])
+    );
+    changes && is_builtin(parts[0])
+}
+
 /// Required warning sink is called only after dispatch returns and all provider
 /// mutation/store guards have been released. Production supplies its private
-/// logger; no silent logging default is installed by this module.
+/// logger; no silent logging default is installed by this module. `ui` is
+/// `Some` only when the router verified the dashboard's proof.
 pub fn handle(
     request: &Request,
     store: &ProviderRegistryStore,
     paths: &RuntimePaths,
+    ui: Option<&VerifiedUiOrigin>,
     command_found: &dyn Fn(&str) -> bool,
     warning: &dyn Fn(&'static str, &str, &StoreError),
 ) -> Option<Response> {
     let mut warnings = vec![];
-    let response = dispatch(request, store, paths, command_found, &mut warnings);
+    let response = dispatch(request, store, paths, ui, command_found, &mut warnings);
     for event in warnings {
         warning(event.operation, &event.provider_id, &event.error);
     }
@@ -317,6 +341,7 @@ fn dispatch(
     request: &Request,
     store: &ProviderRegistryStore,
     paths: &RuntimePaths,
+    ui: Option<&VerifiedUiOrigin>,
     command_found: &dyn Fn(&str) -> bool,
     warnings: &mut Vec<StoreWarning>,
 ) -> Option<Response> {
@@ -345,6 +370,13 @@ fn dispatch(
         });
     }
     let path = request.path.strip_prefix("/api/providers/")?;
+    if ui.is_none() && changes_builtin_definition(request, path) {
+        return Some(Response::error(
+            403,
+            "ui_required",
+            "a built-in AI CLI's definition is changed only from the dashboard while the Hub is running",
+        ));
+    }
     if path == "validate" {
         return Some(validate(request, paths));
     }

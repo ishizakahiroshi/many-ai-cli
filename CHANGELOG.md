@@ -163,6 +163,15 @@ Release artifacts are published at
   document, and links whose target is not a well-formed http(s) URL no longer
   open in one click. The approval tab sanitizes the provider name before using
   it as a CSS class.
+- Changing the definition of one of the seven built-in AI CLIs (edit, disable,
+  reset, restore, recovery) is accepted only from the dashboard page. A request
+  that carries only the Hub token, such as one from a program inside a session
+  or from `many-ai-cli provider ...` while a Hub runs, is refused, so it cannot
+  point the command the Hub runs for a version check at another executable.
+  Registered AI CLIs are unchanged.
+- The Hub refuses a wrapper whose registration or reattach names a provider
+  outside the provider id shape (lowercase letters, digits, `.`, `_`, `-`, or
+  `shell`).
 
 ## [0.11.1] - 2026-11-21
 

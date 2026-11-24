@@ -442,7 +442,7 @@ async fn revoke_waits_for_accepted_paste_and_enter_without_fifo_drain_deadlock()
 async fn loopback_reattach_rejection_and_declared_exit_keep_go_wire_shape() {
     let fixture = fixture().await;
     let (mut invalid, _) = Client::connect(fixture.port, "").await;
-    invalid.json(serde_json::json!({"type":"reattach","session_id":-1,"token":"synthetic-websocket-token"})).await;
+    invalid.json(serde_json::json!({"type":"reattach","session_id":-1,"provider":"shell","token":"synthetic-websocket-token"})).await;
     let rejected = invalid.frame().await.unwrap();
     assert_eq!(rejected["type"], "reattach_reject");
     assert_eq!(rejected["reason"], "invalid session_id");
@@ -475,6 +475,45 @@ async fn loopback_reattach_rejection_and_declared_exit_keep_go_wire_shape() {
     assert_eq!(end.declared_state, "completed");
     assert_eq!(end.exit_code, i64::MAX);
     assert_eq!(end.reason, "synthetic reason");
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn a_wrapper_provider_name_outside_the_id_shape_is_refused() {
+    let fixture = fixture().await;
+    for provider in [
+        "",
+        "Shell",
+        "../escape",
+        "shell/../x",
+        "name with space",
+        "-leading-hyphen",
+        "x\u{1b}[31m",
+    ] {
+        // Registration: no session, no ACK.
+        let (mut peer, _) = Client::connect(fixture.port, "").await;
+        peer.json(serde_json::json!({"type":"register","provider":provider,"cwd":fixture._root.path(),"pid":123,"token":"synthetic-websocket-token"})).await;
+        assert!(peer.frame().await.is_none(), "{provider:?}");
+        assert!(fixture.core.snapshots().is_empty(), "{provider:?}");
+        // Reattach: told to stop retrying, and nothing is bound.
+        let (mut peer, _) = Client::connect(fixture.port, "").await;
+        peer.json(serde_json::json!({"type":"reattach","session_id":7,"provider":provider,"cwd":fixture._root.path(),"pid":123,"token":"synthetic-websocket-token"})).await;
+        let rejected = peer.frame().await.unwrap();
+        assert_eq!(rejected["type"], "reattach_reject", "{provider:?}");
+        assert_eq!(rejected["reason"], "invalid provider");
+        assert!(peer.frame().await.is_none());
+        assert!(fixture.core.snapshots().is_empty(), "{provider:?}");
+    }
+    // A registered id and the shell identity still register.
+    for provider in ["shell", "my-agent.v2_x"] {
+        let (mut peer, _) = Client::connect(fixture.port, "").await;
+        peer.json(serde_json::json!({"type":"register","provider":provider,"cwd":fixture._root.path(),"pid":123,"token":"synthetic-websocket-token"})).await;
+        assert_eq!(
+            peer.frame().await.unwrap()["type"],
+            "registered",
+            "{provider}"
+        );
+    }
     fixture.stop().await;
 }
 

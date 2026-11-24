@@ -91,6 +91,7 @@ fn actual_write_read_version_summary_and_delete_share_private_storage() {
         },
         &owner.registry,
         &p,
+        None,
         &|_| true,
         &|_, _, _| {},
     )
@@ -159,6 +160,12 @@ fn builtin_reset_removes_image_and_restore_reloads_actual_revision() {
             },
             &owner.registry,
             &p,
+            // The dashboard resets and restores a built-in.
+            Some(
+                &crate::proto::core::VerifiedUiOrigin::after_server_verification(
+                    crate::proto::core::AuthEpoch(1),
+                ),
+            ),
             &|_| true,
             &|_, _, _| {},
         )

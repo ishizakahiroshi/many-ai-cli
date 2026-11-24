@@ -43,9 +43,16 @@ impl HubApi for InProcessHub {
             body: body.unwrap_or_default(),
             ..Default::default()
         };
-        let response =
-            provider_routes::handle(&request, &self.store, &self.paths, &|_| true, &|_, _, _| {})
-                .ok_or_else(|| io::Error::other("unrouted"))?;
+        // The CLI holds only the Hub token: it never has the dashboard's proof.
+        let response = provider_routes::handle(
+            &request,
+            &self.store,
+            &self.paths,
+            None,
+            &|_| true,
+            &|_, _, _| {},
+        )
+        .ok_or_else(|| io::Error::other("unrouted"))?;
         if let Some(change) = provider_routes::change_of(&request, &response) {
             self.changes
                 .lock()
@@ -732,12 +739,22 @@ async fn history_commands_go_through_the_hub_only_when_one_runs() {
         "",
     ]);
     assert_eq!(offline(&f).history_via_hub(&reset).await.unwrap(), None);
-    let output = online(&f).history_via_hub(&reset).await.unwrap().unwrap();
-    assert!(output.starts_with("reset\t"), "{output}");
-    assert_eq!(
-        *f.hub.changes.lock().unwrap(),
-        [("claude".to_owned(), "reset")]
+    // A running Hub changes a built-in only from the dashboard: the CLI holds
+    // only the token, so it is told so and nothing changes.
+    let refused = online(&f)
+        .history_via_hub(&reset)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("only from the dashboard"), "{refused}");
+    assert!(
+        f.hub
+            .calls
+            .lock()
+            .unwrap()
+            .contains(&"POST /api/providers/claude/reset".to_owned())
     );
+    assert!(f.hub.changes.lock().unwrap().is_empty());
     // Read-only and unrelated forms stay in process.
     for args in [
         strings(&["recover", "claude", "--list"]),
