@@ -127,6 +127,8 @@ header .header-more-menu > .ui-button {
 #sidebar-head .header-more-menu .ui-button > svg,
 header .header-more-menu .ui-button > svg { width: 16px; height: 16px; flex: none; }
 .header-more-label { font-size: var(--fs-sm); white-space: nowrap; }
+.header-more-menu > [draggable="true"] { cursor: grab; }
+.header-more-menu > .header-more-dragging { opacity: 0.5; }
 .header-more-menu .memo-button-badge { position: static; margin-left: auto; }
 
 /* PC ではヘッダー帯を無くし、ロゴと「＋」をサイドバー上端の 1 行に置く（header-actions.ts）。

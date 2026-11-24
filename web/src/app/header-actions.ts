@@ -37,6 +37,18 @@ function init(): void {
   // 手元 PC の拾い手は、動いているかを点で見せるので「⋯」に入れない（設定している Hub だけに出る）。
   const takerBtn = originalOrder.find(el => el.hasAttribute('data-open-local-taker')) ?? null;
   const menuTargets = originalOrder.filter(el => el !== newBtn && el !== boardBtn && el !== takerBtn);
+  const orderKey = 'headerMoreOrder';
+  const keyOf = (el: HTMLElement): string => el.id || el.dataset.i18nTooltip || '';
+  const orderedTargets = (): HTMLElement[] => {
+    let saved: unknown = [];
+    try { saved = JSON.parse(localStorage.getItem(orderKey) || '[]'); } catch { /* use default order */ }
+    const keys = Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [];
+    return [...menuTargets].sort((a, b) => {
+      const ai = keys.indexOf(keyOf(a));
+      const bi = keys.indexOf(keyOf(b));
+      return (ai < 0 ? keys.length : ai) - (bi < 0 ? keys.length : bi);
+    });
+  };
 
   const more = document.createElement('div');
   more.className = 'header-more';
@@ -59,6 +71,45 @@ function init(): void {
   menu.setAttribute('data-wheel-native', '');
   menu.hidden = true;
   more.append(moreBtn, menu);
+
+  const saveOrder = (): void => {
+    try { localStorage.setItem(orderKey, JSON.stringify(Array.from(menu.children, el => keyOf(el as HTMLElement)))); } catch { /* storage may be unavailable */ }
+  };
+  let dragged: HTMLElement | null = null;
+  for (const item of menuTargets) {
+    item.addEventListener('dragstart', event => {
+      if (!item.draggable) return;
+      dragged = item;
+      item.classList.add('header-more-dragging');
+      event.dataTransfer?.setData('text/plain', keyOf(item));
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragover', event => {
+      if (!dragged || dragged === item) return;
+      event.preventDefault();
+      const after = event.clientY >= item.getBoundingClientRect().top + item.offsetHeight / 2;
+      menu.insertBefore(dragged, after ? item.nextSibling : item);
+    });
+    item.addEventListener('drop', event => {
+      if (!dragged) return;
+      event.preventDefault();
+      saveOrder();
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('header-more-dragging');
+      dragged = null;
+      for (const target of orderedTargets()) menu.appendChild(target);
+    });
+    item.addEventListener('keydown', event => {
+      if (!item.draggable || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      const sibling = event.key === 'ArrowUp' ? item.previousElementSibling : item.nextElementSibling;
+      if (!sibling) return;
+      event.preventDefault();
+      menu.insertBefore(item, event.key === 'ArrowUp' ? sibling : sibling.nextSibling);
+      saveOrder();
+      item.focus();
+    });
+  }
 
   const refreshTip = (): void => {
     const tip = tr('header_more_tooltip', 'More');
@@ -119,7 +170,7 @@ function init(): void {
     hosted = desktop;
     const fold = desktop && !detachedView;
     if (desktop) {
-      for (const el of menuTargets) { menu.appendChild(el); decorate(el, true); }
+      for (const el of orderedTargets()) { menu.appendChild(el); el.draggable = true; decorate(el, true); }
       bar.replaceChildren(...[takerBtn, boardBtn, newBtn, more].filter((el): el is HTMLElement => !!el));
       if (fold) {
         head.append(...[logo, runtimeBadge, bar].filter((el): el is HTMLElement => !!el));
@@ -132,7 +183,7 @@ function init(): void {
       refreshDot();
     } else {
       setOpen(false);
-      for (const el of menuTargets) decorate(el, false);
+      for (const el of menuTargets) { el.draggable = false; decorate(el, false); }
       bar.replaceChildren(...originalOrder);
       anchor.after(bar);
       if (logo) header.prepend(logo);
