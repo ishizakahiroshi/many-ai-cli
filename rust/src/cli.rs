@@ -174,6 +174,11 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
         "orchestrate" if rest.is_empty() => return Err("orchestrate <spawn|send>".into()),
         "orchestrate" => Command::Orchestrate(rest),
         "wrap" if rest.is_empty() => return Err("wrap <provider>".into()),
+        // The Hub refuses a wrapper whose provider name is not a provider id,
+        // so say why here instead of failing later at registration.
+        "wrap" if !crate::profile::validation::valid_session_provider(&rest[0]) => {
+            return Err(WRAP_PROVIDER_SHAPE.into());
+        }
         "wrap" => Command::Wrap {
             provider: rest[0].clone(),
             args: rest[1..].to_vec(),
@@ -188,6 +193,8 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
     };
     Ok(Invocation { trial, command })
 }
+/// Why `wrap <provider>` was refused before it reached the Hub.
+pub const WRAP_PROVIDER_SHAPE: &str = "wrap: the provider name must be a provider id (lowercase letters, digits, '.', '_' or '-', starting with a letter or digit, at most 64 characters)";
 
 #[cfg(test)]
 mod tests {
@@ -228,6 +235,19 @@ mod tests {
         ));
         assert!(parse(&args(&["orchestrate"]), &[]).is_err());
         assert!(parse(&args(&["wrap"]), &[]).is_err());
+        // A name the Hub would refuse is refused here with the reason.
+        for name in ["Claude", "../x", "a b", ""] {
+            assert_eq!(
+                parse(&args(&["wrap", name]), &[]).unwrap_err(),
+                WRAP_PROVIDER_SHAPE
+            );
+        }
+        for name in ["shell", "my-cli.v2"] {
+            assert!(matches!(
+                parse(&args(&["wrap", name]), &[]).unwrap().command,
+                Command::Wrap { .. }
+            ));
+        }
         assert!(parse(&args(&["gemini"]), &[]).is_err());
     }
     #[test]

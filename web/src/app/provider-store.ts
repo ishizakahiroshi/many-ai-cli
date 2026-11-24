@@ -91,16 +91,55 @@ export type ProviderMutationResult =
   | { ok: true; revision: string; diagnostics: ProviderDiagnostic[] }
   | ProviderRequestFailure;
 
+type ProviderFetchOutcome =
+  | { outcome: 'ok'; status: number; body: any }
+  | { outcome: 'http-error'; status: number; body: any }
+  | { outcome: 'network' }
+  | { outcome: 'aborted' };
+
+// 同梱の AI CLI の定義を変える要求（編集・無効化・初期化・復元・復旧）は、token に加えて画面の印
+// （ページを読み込んだときに Hub が出す cookie）が要る。印はページを読み込んだときにだけ出し直され、
+// 24 時間で切れる。開いたままの画面で断られたら（403 ui_required）、ページの入口を 1 回読んで印を
+// 出し直し、同じ要求を 1 回だけ送り直す。それでも断られたら、呼び出し側が「ページを開き直して」を出す。
 async function providerFetchJSON(
   url: string,
   init: RequestInit | undefined,
   signal: AbortSignal | undefined,
-): Promise<
-  | { outcome: 'ok'; status: number; body: any }
-  | { outcome: 'http-error'; status: number; body: any }
-  | { outcome: 'network' }
-  | { outcome: 'aborted' }
-> {
+): Promise<ProviderFetchOutcome> {
+  const first = await providerFetchOnce(url, init, signal);
+  if (!refusedForDashboardProof(first, init)) return first;
+  if (!(await renewDashboardProof(signal))) return first;
+  return providerFetchOnce(url, init, signal);
+}
+
+function refusedForDashboardProof(result: ProviderFetchOutcome, init: RequestInit | undefined): boolean {
+  const method = (init?.method || 'GET').toUpperCase();
+  return method !== 'GET'
+    && result.outcome === 'http-error'
+    && result.status === 403
+    && result.body?.error === 'ui_required';
+}
+
+// ページの入口（GET /）は token なしで読め、応答で画面の印を出し直す。中身は使わない。
+async function renewDashboardProof(signal: AbortSignal | undefined): Promise<boolean> {
+  try {
+    const response = await fetch('/', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      ...(signal ? { signal } : {}),
+    });
+    try { await response.arrayBuffer(); } catch (_) { /* 読み捨て */ }
+    return response.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function providerFetchOnce(
+  url: string,
+  init: RequestInit | undefined,
+  signal: AbortSignal | undefined,
+): Promise<ProviderFetchOutcome> {
   try {
     const response = await apiFetch(url, signal ? { ...init, signal } : init);
     let body: any = null;

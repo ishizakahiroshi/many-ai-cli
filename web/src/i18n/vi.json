@@ -1973,6 +1973,8 @@
   "settings_ai_providers_cannot_clear": "Các trường sau có giá trị mặc định phân phối nên không thể lưu trống: {fields}. Hãy giữ giá trị hoặc nhập giá trị khác.",
   "settings_ai_providers_request_failed_detail": "Yêu cầu thất bại ({status}): {detail}",
   "settings_ai_providers_revision_conflict": "Đã có thay đổi ở nơi khác. Tải lại rồi thử lại.",
+  "settings_ai_providers_reload_page": "Hãy tải lại trang này rồi thử lại.",
+  "settings_ai_providers_needs_secure_page": "Không thể thay đổi AI CLI có sẵn từ trang mở bằng http thường từ máy khác. Hãy mở bảng điều khiển qua chuyển tiếp SSH (127.0.0.1) hoặc HTTPS.",
   "settings_ai_providers_disable": "Tắt",
   "settings_ai_providers_enable": "Bật",
   "settings_ai_providers_disable_confirm": "Tắt {name}? Bạn có thể bật lại bất cứ lúc nào.",

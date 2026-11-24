@@ -1973,6 +1973,8 @@
   "settings_ai_providers_cannot_clear": "次の項目は配布元の既定値があるため、空にして保存できません: {fields}。元の値を残すか、別の値を入れてください。",
   "settings_ai_providers_request_failed_detail": "リクエストに失敗しました（{status}）: {detail}",
   "settings_ai_providers_revision_conflict": "他の場所で変更されています。再読込してからやり直してください。",
+  "settings_ai_providers_reload_page": "このページを開き直してから、もう一度お試しください。",
+  "settings_ai_providers_needs_secure_page": "ほかの PC から http（暗号化なし）で開いた画面では、同梱の AI CLI を変えられません。SSH の転送（127.0.0.1）か HTTPS で画面を開いてください。",
   "settings_ai_providers_disable": "無効化",
   "settings_ai_providers_enable": "有効化",
   "settings_ai_providers_disable_confirm": "{name} を無効化しますか。いつでも再度有効化できます。",

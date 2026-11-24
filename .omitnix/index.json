@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "bedfe3ea00c1e309dd2aa3e08d9bc8bd046feaa9",
+    "commit": "207b778c6a06adbadeae5f56695d4ec24fb2a90b",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2147,
-    "analyzed": 1685,
+    "discovered": 2148,
+    "analyzed": 1686,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -47859,8 +47859,10 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "/"
+          ]
         }
       },
       "unresolved": []
@@ -52728,6 +52730,36 @@
     },
     {
       "path": "web/tests/provider-icon.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/provider-store-ui-proof.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

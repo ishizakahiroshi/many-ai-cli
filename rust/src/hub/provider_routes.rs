@@ -8,7 +8,9 @@
 //! Hub itself runs a built-in's launch and version commands (`cli_version`), so
 //! a caller that holds only the Hub token (any program inside a session) must
 //! not be able to point them at another executable. Registered (not built-in)
-//! ids keep their token-only routes.
+//! ids keep their token-only routes. A built-in's icon image
+//! (`icon_routes`) is a separate store that is only shown, never run, so it
+//! keeps the token-only routes too.
 use super::http::{Request, Response, decode_json};
 use crate::{
     config::{Resource, RuntimePaths},

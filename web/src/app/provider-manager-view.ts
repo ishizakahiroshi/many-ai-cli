@@ -140,6 +140,20 @@ export function providerErrorMessage(failure: ProviderRequestFailureLike): { key
       vars: { fields: failure.fields.join(', ') },
     };
   }
+  // The Hub wants the dashboard's proof to change a built-in, and renewing it
+  // once did not help (provider-store already retried). Over plain http on an
+  // address other than this PC the browser leaves out a header the proof
+  // needs, so reloading would not help there either.
+  if (failure.kind === 'http' && failure.code === 'ui_required') {
+    if (globalThis.isSecureContext === false) {
+      return {
+        key: 'settings_ai_providers_needs_secure_page',
+        fallback: "A built-in AI CLI can't be changed from a page opened over plain http from another computer. Open the dashboard through an SSH forward (127.0.0.1) or HTTPS.",
+        vars: {},
+      };
+    }
+    return { key: 'settings_ai_providers_reload_page', fallback: 'Reload this page, then try again.', vars: {} };
+  }
   if (failure.kind === 'http' && failure.status === 409) {
     return { key: 'settings_ai_providers_revision_conflict', fallback: 'This was changed elsewhere. Reload and try again.', vars: {} };
   }

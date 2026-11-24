@@ -164,14 +164,16 @@ Release artifacts are published at
   open in one click. The approval tab sanitizes the provider name before using
   it as a CSS class.
 - Changing the definition of one of the seven built-in AI CLIs (edit, disable,
-  reset, restore, recovery) is accepted only from the dashboard page. A request
-  that carries only the Hub token, such as one from a program inside a session
-  or from `many-ai-cli provider ...` while a Hub runs, is refused, so it cannot
-  point the command the Hub runs for a version check at another executable.
-  Registered AI CLIs are unchanged.
+  reset, restore, recovery) now also needs the sign-in cookie the dashboard
+  page gets when it loads and the browser's same-origin request headers. A
+  request that carries only the Hub token, such as one from a program inside a
+  session or from `many-ai-cli provider ...` while a Hub runs, is refused, so it
+  cannot point the command the Hub runs for a version check at another
+  executable. A dashboard left open for more than a day renews the cookie and
+  sends the change again by itself. Registered AI CLIs are unchanged.
 - The Hub refuses a wrapper whose registration or reattach names a provider
   outside the provider id shape (lowercase letters, digits, `.`, `_`, `-`, or
-  `shell`).
+  `shell`), and `many-ai-cli wrap` refuses such a name up front with the reason.
 
 ## [0.11.1] - 2026-11-21
 
