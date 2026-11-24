@@ -1310,16 +1310,23 @@ mod tests {
                 BillingError::PlanLoginOwnSettings.reason_code()
             );
         }
-        // Another endpoint (a local model route or the person's gateway)
-        // keeps its key and its settings as before.
-        let gateway = run(
-            "claude",
+        let to_gateway = || {
             vec![
                 format!("ANTHROPIC_API_KEY={KEY}"),
-                "ANTHROPIC_BASE_URL=http://127.0.0.1:9".into(),
-            ],
-            vec![],
-        );
+                "ANTHROPIC_BASE_URL=http://127.0.0.1:9".to_owned(),
+            ]
+        };
+        // While the person's own settings cannot be read (too large), whether
+        // they replace the gateway in the environment is not decided: the key
+        // is switched off.
+        let undecided = run("claude", to_gateway(), vec![]);
+        undecided.result.unwrap();
+        assert_eq!(inherited(&undecided.env, "ANTHROPIC_API_KEY"), Some(None));
+        assert_eq!(undecided.settings.unwrap()["apiKeyHelper"], "");
+        std::fs::remove_file(home.join(".claude").join("settings.json")).unwrap();
+        // Another endpoint (a local model route or the person's gateway)
+        // keeps its key and its settings as before.
+        let gateway = run("claude", to_gateway(), vec![]);
         gateway.result.unwrap();
         assert_eq!(
             inherited(&gateway.env, "ANTHROPIC_API_KEY"),
@@ -1348,6 +1355,19 @@ mod tests {
                 .settings
                 .is_none_or(|settings| settings.get("apiKeyHelper").is_none())
         );
+        // The same gateway written only in the project's settings does not
+        // count (anyone can write those into a repository): the key is
+        // switched off.
+        std::fs::create_dir_all(cwd.join(".claude")).unwrap();
+        std::fs::rename(
+            home.join(".claude").join("settings.json"),
+            cwd.join(".claude").join("settings.json"),
+        )
+        .unwrap();
+        let project = run("claude", vec![format!("ANTHROPIC_API_KEY={KEY}")], vec![]);
+        project.result.unwrap();
+        assert_eq!(inherited(&project.env, "ANTHROPIC_API_KEY"), Some(None));
+        assert_eq!(project.settings.unwrap()["apiKeyHelper"], "");
         // A provider without API key billing is not touched.
         let other = run("codex", vec![format!("ANTHROPIC_API_KEY={KEY}")], vec![]);
         other.result.unwrap();

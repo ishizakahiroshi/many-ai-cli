@@ -56,10 +56,15 @@ Release artifacts are published at
   plan login, log in to your plan, or create a profile and approve API key
   billing per run. A run stops before it starts, with the reason on its card,
   only when its arguments already pass another `--settings` or its session
-  settings cannot be written. A run with a non-empty `ANTHROPIC_BASE_URL` in
-  the environment or in `env` of your user, project or local Claude settings
-  (a local model route or your own gateway) keeps its key and settings as
-  before (#14).
+  settings cannot be written. A run whose `ANTHROPIC_BASE_URL` is non-empty
+  in the end, from the environment and then `env` of your own user Claude
+  settings (`settings.json`, then `settings.local.json`, in
+  `CLAUDE_CONFIG_DIR` or `~/.claude`; a later empty value counts), is a local
+  model route or your own gateway and keeps its key and settings as before.
+  A gateway written only in a project's `.claude/settings.json` or
+  `.claude/settings.local.json` does not count, because anyone can write
+  those into a repository, so that run's key is switched off: put your
+  gateway in the environment or your user Claude settings instead (#14).
 - **Sidebar display density** can be switched between Standard and Compact in
   Settings. Compact uses one-line cards, thinner project headings and a
   details popover after a short hover. The selected-session header also shows
