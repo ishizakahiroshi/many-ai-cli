@@ -411,6 +411,8 @@ impl SessionEngine {
             controlling_ui: None,
             input,
             input_lane: Arc::new(lane::InputLane::default()),
+            iris_ack: None,
+            iris_invalidated: None,
             awaiting_submit_enter: false,
             last_output: None,
             subagent_activity_at: None,
@@ -669,6 +671,7 @@ impl SessionEngine {
                 session.vt.write(&replay);
             }
             session.approval = old.approval;
+            session.iris_invalidated = old.iris_invalidated;
             session.marker_source = old.marker_source;
             session.marker_suppression = old.marker_suppression;
             session.input = old.input;

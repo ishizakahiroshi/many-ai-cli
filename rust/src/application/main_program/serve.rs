@@ -623,6 +623,7 @@ impl HubComposition {
         bound_effects
             .set(Arc::downgrade(&effects))
             .map_err(|_| io::Error::other("effects already bound"))?;
+        board.start_confirmations(Arc::downgrade(&core));
         let trait_core: Arc<dyn SessionCore> = core.clone();
         let instruction_rules = crate::application::instruction_rules::InstructionRules::new(
             paths.clone(),

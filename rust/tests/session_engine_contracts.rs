@@ -5,6 +5,10 @@ use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 mod approval_actions;
 #[path = "session_engine/branch_persistence.rs"]
 mod branch_persistence;
+#[path = "session_engine/iris_board_sync.rs"]
+mod iris_board_sync;
+#[path = "session_engine/iris_confirmation.rs"]
+mod iris_confirmation;
 #[path = "session_engine/marker_suppression.rs"]
 mod marker_suppression;
 #[path = "session_engine/reattach_transaction.rs"]

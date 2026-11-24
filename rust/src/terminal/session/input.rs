@@ -487,6 +487,11 @@ impl SessionEngine {
         let mut post = CoreEffects::default();
         let mut summary_update = None;
         let mut title_meta = None;
+        // A person may already be typing an answer, including an incomplete
+        // one. Never append a remote answer to those bytes.
+        if request.authority.ui_binding().is_some() && !request.bytes.is_empty() {
+            s.retire_iris_confirmation();
+        }
         let raw = proto::wire::go_utf8_lossy(&request.bytes);
         if let Some(text) = confirmed_turn_text(&raw) {
             if request.authority.ui_binding().is_some() {
@@ -905,6 +910,12 @@ impl InputQueue for SessionEngine {
         else {
             return AckDisposition::MissingSession;
         };
+        if s.binding == binding
+            && s.iris_ack.as_ref().is_some_and(|(sent, _)| *sent == seq)
+            && let Some((_, ack)) = s.iris_ack.take()
+        {
+            let _ = ack.send(());
+        }
         s.input.acknowledge(binding.wrapper, seq)
     }
     fn transport_failed(&self, binding: SessionBinding, now: Timestamp) -> CoreEffects {

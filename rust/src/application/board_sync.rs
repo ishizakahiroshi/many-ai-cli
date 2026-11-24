@@ -123,6 +123,9 @@ struct RepoEntry {
     path: PathBuf,
     #[serde(default)]
     project: Option<String>,
+    /// Dedicated device credential; only these repositories publish confirmations.
+    #[serde(default)]
+    confirmation_key_file: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1632,6 +1635,20 @@ impl BoardSync {
         tool: &str,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, Failed> {
+        let result = self.structured_reply(target, tool, arguments).await?;
+        if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+            self.warn_once("board refused the write");
+            return Err(Failed::Refused);
+        }
+        Ok(result)
+    }
+
+    async fn structured_reply(
+        &self,
+        target: &Target,
+        tool: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, Failed> {
         // A board on this machine is reached over plain http, and a loopback
         // port answers to whoever listens on it: while the board server is
         // down, another OS user can take the port and would be handed the
@@ -1701,14 +1718,11 @@ impl BoardSync {
             .and_then(|result| result.get("structuredContent"))
             .cloned()
             .ok_or(Failed::Unreached)?;
-        if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
-            self.warn_once("board refused the write");
-            return Err(Failed::Refused);
-        }
         Ok(result)
     }
 }
 
+mod confirmations;
 mod taker;
 mod taker_log;
 pub use taker::{RunOutcome, RunRequest, Runner, Taken, TakerStatus};

@@ -35,6 +35,7 @@ pub mod completion;
 pub mod confirmations;
 mod headless_progress;
 mod input;
+pub mod iris_confirmation;
 mod lane;
 mod lifecycle;
 mod observations;
@@ -207,6 +208,8 @@ struct Session {
     controlling_ui: Option<UiConnectionId>,
     input: InputState,
     input_lane: Arc<lane::InputLane>,
+    iris_ack: Option<(InputSeq, tokio::sync::oneshot::Sender<()>)>,
+    iris_invalidated: Option<CandidateIdentity>,
     awaiting_submit_enter: bool,
     last_output: Option<Timestamp>,
     /// High-water mark of the provider's sub-agent log folder; reset by a new turn.

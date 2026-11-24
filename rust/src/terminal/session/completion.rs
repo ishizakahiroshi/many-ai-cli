@@ -318,6 +318,9 @@ impl SessionEngine {
         {
             return Err(SessionError::StaleBinding);
         }
+        if ambiguous || next.as_ref().is_some_and(|path| path != current) {
+            s.retire_iris_confirmation();
+        }
         s.marker_source.codex_thread_ambiguous = ambiguous;
         if let Some(next) = next {
             s.transcript.native_log_path = next.to_string_lossy().into_owned();
@@ -335,7 +338,10 @@ impl SessionEngine {
         Ok(lock(&self.state).session(binding)?.usage_probe)
     }
     pub fn observe_transcript_miss(&self, binding: SessionBinding) -> Result<bool, SessionError> {
-        Ok(lock(&self.state).session(binding)?.marker_source.miss())
+        let mut state = lock(&self.state);
+        let s = state.session(binding)?;
+        s.retire_iris_confirmation();
+        Ok(s.marker_source.miss())
     }
     pub fn observe_transcript_batch(
         &self,
@@ -347,6 +353,11 @@ impl SessionEngine {
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         let s = state.session(binding)?;
+        if !s.marker_source.resolved_path.as_os_str().is_empty()
+            && s.marker_source.resolved_path != path
+        {
+            s.retire_iris_confirmation();
+        }
         s.marker_source.resolved(path);
         if s.completion.launch_arg
             && s.completion.initial.is_none()
@@ -389,9 +400,37 @@ impl SessionEngine {
                 }
                 s.approval.transcript_user_boundary();
             } else if message.role == "assistant" {
-                if let Some(marker) = crate::approval::marker::extract(&message.text) {
+                let latest = crate::approval::marker::extract(&message.text);
+                if s.approval.record().is_some_and(|record| {
+                    let data = record.data();
+                    data.source == "transcript"
+                        && data.origin == "marker"
+                        && (latest
+                            .as_ref()
+                            .is_none_or(|marker| marker.block != data.block)
+                            || !message.tools.is_empty())
+                }) {
+                    s.retire_iris_confirmation();
+                }
+                if let Some(marker) = latest {
                     effects.0.extend(s.set_transcript_question(None, now).0);
                     let (admitted, warning) = s.observe_marker(Some(marker), "transcript", now)?;
+                    // A read of old history on startup is not proof that an
+                    // unanswered question is still on the terminal. Keep the
+                    // local record, and require fresh screen evidence for Iris.
+                    let restored_off_screen = prime
+                        && s.approval
+                            .record()
+                            .is_some_and(|record| !s.iris_vt_marker_visible(&record.data().block));
+                    if restored_off_screen
+                        || !message.tools.is_empty()
+                        || !message
+                            .text
+                            .trim_end()
+                            .ends_with(crate::approval::marker::CLOSE)
+                    {
+                        s.retire_iris_confirmation();
+                    }
                     effects.0.extend(admitted.0);
                     if let Some(error) = warning {
                         warnings.push(error);

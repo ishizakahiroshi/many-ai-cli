@@ -79,6 +79,14 @@ impl SessionEngine {
         }
         // Custom providers are detected too (the frozen Go build did the same:
         // `isAIProvider || customProviderSession`); only probes and shells are not.
+        if s.approval.record().is_some_and(|record| {
+            let data = record.data();
+            data.source == "go_vt"
+                && data.origin == "marker"
+                && !s.iris_vt_marker_visible(&data.block)
+        }) {
+            s.retire_iris_confirmation();
+        }
         let eligible = s.native_detection_eligible(now);
         if eligible
             && !s.marker_source.is_transcript(&s.snapshot.provider)
@@ -338,6 +346,11 @@ impl SessionEngine {
                 s.transcript.native_log_path = path.to_string_lossy().into_owned();
                 s.transcript.agent_session_id = agent_session_id;
                 s.transcript_offset = safe_offset;
+                if !s.marker_source.resolved_path.as_os_str().is_empty()
+                    && s.marker_source.resolved_path != path
+                {
+                    s.retire_iris_confirmation();
+                }
                 s.marker_source.resolved(path.clone());
                 let push = s.note_growth(grew_at.clone(), now);
                 effects
@@ -683,7 +696,7 @@ impl State {
 const GROW_PUSH_INTERVAL: Duration = Duration::from_secs(10);
 impl Session {
     /// Whether the screen is read for approvals (markers and native prompts).
-    fn native_detection_eligible(&self, now: Timestamp) -> bool {
+    pub(super) fn native_detection_eligible(&self, now: Timestamp) -> bool {
         !self.usage_probe
             && self.snapshot.provider != "shell"
             && !terminal(&self.snapshot.state)
@@ -755,6 +768,16 @@ impl Session {
         now: Timestamp,
     ) -> Result<(CoreEffects, Option<SessionError>), SessionError> {
         let mut effects = CoreEffects::default();
+        if self.approval.record().is_some_and(|record| {
+            let data = record.data();
+            data.origin == "marker"
+                && data.source == source
+                && marker
+                    .as_ref()
+                    .is_none_or(|latest| latest.block != data.block)
+        }) {
+            self.retire_iris_confirmation();
+        }
         match self.marker_suppression.evaluate(marker.as_ref(), now) {
             MarkerSuppressionDecision::Empty => Ok((effects, None)),
             MarkerSuppressionDecision::Valid => {
