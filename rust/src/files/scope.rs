@@ -123,12 +123,13 @@ impl Scope {
         remote: bool,
         workspace: &dyn WorkspaceReads,
     ) -> Result<ReadGrant> {
-        let raw = r.query("path");
-        if raw.is_empty() {
+        let queried = r.query("path");
+        if queried.is_empty() {
             return Err(err(400, "bad_request", "path parameter is required"));
         }
-        local_spelling(&raw)?;
-        let input = Path::new(&raw);
+        let raw = slash_disk(&queried);
+        local_spelling(raw)?;
+        let input = Path::new(raw);
         if !input.is_absolute() {
             return Err(err(400, "bad_request", "path must be an absolute path"));
         }
@@ -225,6 +226,25 @@ pub fn local_spelling(raw: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+/// A Windows disk path printed with a leading slash (`/C:/...`), as AI CLIs
+/// emit when they cut the scheme off a `file:///C:/...` URI, names the disk
+/// path. Folded before spelling and absoluteness are judged so the name
+/// judged is the name the OS opens. Two leading separators still name
+/// another machine and stay refused by `local_spelling`.
+pub fn slash_disk(raw: &str) -> &str {
+    if cfg!(windows) {
+        let bytes = raw.as_bytes();
+        if bytes.len() >= 4
+            && bytes[0] == b'/'
+            && bytes[1].is_ascii_alphabetic()
+            && bytes[2] == b':'
+            && matches!(bytes[3], b'/' | b'\\')
+        {
+            return &raw[1..];
+        }
+    }
+    raw
 }
 pub fn clean(path: &Path) -> PathBuf {
     let mut p = PathBuf::new();

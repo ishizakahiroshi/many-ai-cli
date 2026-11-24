@@ -111,7 +111,7 @@ fn required_abs(value: &str, name: &str) -> Result<PathBuf> {
     if value.is_empty() {
         return Err(err(400, "bad_request", &format!("{name} is required")));
     }
-    let p = Path::new(value);
+    let p = Path::new(scope::slash_disk(value));
     if !p.is_absolute() {
         return Err(err(
             400,

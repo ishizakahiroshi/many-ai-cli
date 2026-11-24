@@ -5,7 +5,7 @@
 // state.js / files-view.js を経由して window への副作用（window.showToast 代入等）を
 // 持ち込むため、bun:test（DOM 無し）から import すると失敗する。ここでは path-detect.js
 // （DOM に依存しない）だけを import し、joinPath 相当はこのファイル内に複製する。
-import { isAbsolutePath } from './path-detect.js';
+import { foldSlashDisk, isAbsolutePath } from './path-detect.js';
 
 // C4（件数バッジ）向けの通知イベント名。ここに置く理由: session-list.ts は
 // spawn-panel.ts が session-list.ts の providerIconHtml を import しており、
@@ -171,7 +171,8 @@ export function saveTextToMemo(text: string, sessionId?: number | string | null)
  * 時点ではセッションが終わっていることが多いこの用途には使えない（plan_memo-panel.md C3）。
  */
 export function resolveMemoPathTarget(candidateText: string, project: string): string {
-  if (isAbsolutePath(candidateText)) return candidateText;
+  const folded = foldSlashDisk(candidateText);
+  if (isAbsolutePath(folded)) return folded;
   if (!project) return candidateText;
   return joinPath(project, candidateText);
 }

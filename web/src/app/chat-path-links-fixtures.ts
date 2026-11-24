@@ -18,6 +18,15 @@ test('chat paths: the usual forms still become links', () => {
   assert.equal(pieces.map(p => p.text).join(''), 'edit src/app.ts; done');
 });
 
+test('chat paths: a file-URI spelling without the scheme links the disk path', () => {
+  // AI CLIs cut `file:///D:/...` down to `/D:/...`; the link opens the disk path.
+  assert.deepEqual(paths('see (/D:/work/x/y.html) now'), ['D:/work/x/y.html']);
+  const pieces = splitChatPaths('see (/D:/work/x/y.html) now');
+  assert.equal(pieces.map(p => p.text).join(''), 'see (/D:/work/x/y.html) now');
+  // `//host/...` still names another machine and is not folded to a drive.
+  assert.deepEqual(paths('see //D:/work/x/y.html now'), ['//D:/work/x/y.html']);
+});
+
 test('chat paths: a relative path body is read up to 255 characters', () => {
   const name = 'a'.repeat(255) + '.ts';
   assert.deepEqual(paths(name), [name]);

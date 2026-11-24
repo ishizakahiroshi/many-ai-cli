@@ -83,6 +83,13 @@ export function isAbsolutePath(path: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/');
 }
 
+// AI CLI が `file:///D:/...` の scheme を削った形（`/D:/...`）で出す Windows
+// パスを、OS が受け付ける `D:/` へ畳む。Hub 側の scope::slash_disk と同じ段。
+// 先頭 2 連続区切り（//host/... は別マシン名）は畳まない。
+export function foldSlashDisk(path: string): string {
+  return /^\/(?=[A-Za-z]:[\\/])/.test(path) ? path.slice(1) : path;
+}
+
 // Windows drive paths can appear with either backslashes or forward slashes
 // in terminal output, e.g. D:\src\app.go or C:/example/project/README.md.
 // バッククォートは Unix / 相対パスと同じく除外する（Markdown のコードスパン閉じをパスに含めない）。

@@ -8,6 +8,7 @@ import { openDetachedFileWindow } from './detached-view-mode.js';
 import type { DetachedWindowSize } from './detached-view-mode.js';
 import {
   findPathCandidates,
+  foldSlashDisk,
   isAbsolutePath,
   trimTerminalPathCandidate,
 } from './path-detect.js';
@@ -17,6 +18,7 @@ export {
   ABS_WIN_PATH_RE,
   REL_PATH_RE,
   findPathCandidates,
+  foldSlashDisk,
   isAbsolutePath,
   isLikelyRelPath,
   isTerminalPathStartBoundary,
@@ -474,7 +476,7 @@ export function normalizePathSegments(path, sep) {
 }
 
 export function resolveTerminalPathCandidate(path, sessionId) {
-  const cleaned = trimTerminalPathCandidate(path);
+  const cleaned = foldSlashDisk(trimTerminalPathCandidate(path));
   if (!cleaned) return '';
   if (isAbsolutePath(cleaned)) return cleaned;
   const cwd = sessions.get(sessionId)?.cwd || '';

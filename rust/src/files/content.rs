@@ -193,12 +193,13 @@ impl FilesService {
     }
 }
 fn list(r: &Request, s: &Scope, remote: bool) -> Result<Response> {
-    let raw = r.query("root");
-    let root = if raw.is_empty() {
+    let queried = r.query("root");
+    let root = if queried.is_empty() {
         s.cwd.join("docs").join("local")
     } else {
-        scope::local_spelling(&raw)?;
-        let p = Path::new(&raw);
+        let raw = scope::slash_disk(&queried);
+        scope::local_spelling(raw)?;
+        let p = Path::new(raw);
         if !p.is_absolute() {
             return Err(err(400, "bad_request", "root must be an absolute path"));
         }

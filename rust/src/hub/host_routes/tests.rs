@@ -602,6 +602,26 @@ async fn default_open_judges_the_canonical_name_and_shows_other_types_in_their_f
             );
             assert_eq!(last(), opened(OpenKind::Reveal, Path::new(&payload)));
         }
+        // A `file:///C:/` URI with the scheme cut (`/C:/`), as AI CLIs print
+        // paths, names the same disk path; a missing one is "not found", not
+        // a refused spelling.
+        let slash_disk = format!("/{}", plain.display().to_string().replace('\\', "/"));
+        assert_eq!(
+            open(&f, "/api/open-default-file", &slash_disk).await.1["revealed"],
+            true,
+            "{slash_disk}"
+        );
+        assert_eq!(last(), opened(OpenKind::Reveal, Path::new(&payload)));
+        assert_eq!(
+            open(
+                &f,
+                "/api/open-default-file",
+                slash_disk.replace("payload.bat", "missing.txt")
+            )
+            .await
+            .0,
+            404
+        );
     }
     // The name is judged after `..` and links are resolved.
     let roundabout = format!("{}{sep}..{sep}payload.bat", root.join("docs").display());

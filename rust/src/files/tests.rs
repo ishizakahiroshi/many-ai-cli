@@ -619,6 +619,11 @@ fn audit_u14_network_share_paths_are_refused_and_local_spellings_still_open() {
             &ws,
         ));
         assert_eq!(listed.status, 200);
+        // A `file:///C:/` URI with the scheme cut (`/C:/...`), as AI CLIs
+        // print paths, names the same disk path; `//host/...` above stays
+        // refused.
+        let slash_disk = format!("/{}", file.display().to_string().replace('\\', "/"));
+        assert_eq!(read(Path::new(&slash_disk)), 200, "{slash_disk}");
     }
 }
 

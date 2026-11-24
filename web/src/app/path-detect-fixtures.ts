@@ -8,6 +8,7 @@ import {
   continuationIndentLength,
   expandLogicalPathLine,
   findPathCandidates,
+  foldSlashDisk,
   isPathContinuationText,
   joinPathWrapRowTexts,
   looksLikePathWrapContinuation,
@@ -70,6 +71,15 @@ test('path detection: long whitespace and wrap punctuation complete without bloc
         throw new Error('path detection changed the candidate');
       }
   `);
+});
+
+test('slash disk: a file-URI spelling without the scheme folds to the disk path', () => {
+  assert.equal(foldSlashDisk('/D:/work/x/y.html'), 'D:/work/x/y.html');
+  assert.equal(foldSlashDisk('/d:\\work\\x'), 'd:\\work\\x');
+  // Only one leading separator folds: `//` still names another machine.
+  assert.equal(foldSlashDisk('//D:/work/x'), '//D:/work/x');
+  assert.equal(foldSlashDisk('/D:'), '/D:');
+  assert.equal(foldSlashDisk('/usr/local/bin'), '/usr/local/bin');
 });
 
 test('path suffix: trailing punctuation is removed and internal punctuation is preserved', () => {

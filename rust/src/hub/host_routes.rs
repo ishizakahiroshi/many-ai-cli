@@ -132,8 +132,8 @@ impl HostHttp {
                     if p.is_empty() {
                         continue;
                     }
-                    let target = if Path::new(&p).is_absolute() {
-                        PathBuf::from(&p)
+                    let target = if Path::new(scope::slash_disk(&p)).is_absolute() {
+                        PathBuf::from(scope::slash_disk(&p))
                     } else {
                         self.files.hub_cwd.join(&p)
                     };
@@ -158,7 +158,7 @@ impl HostHttp {
                     // never handed over, where a terminal would run it,
                     // and a name that does not exist cannot carry text
                     // the terminal reads as a command (audit N12).
-                    let raw = without_verbatim_disk(&body.path);
+                    let raw = scope::slash_disk(without_verbatim_disk(&body.path));
                     if !plain_local_spelling(raw) {
                         return Response::error(403, "forbidden", "path spelling not allowed");
                     }
@@ -184,7 +184,7 @@ impl HostHttp {
                 // receives is fixed once: a plain spelling is resolved to its
                 // canonical path, the type is judged on that name, and that
                 // same path is what is opened (U15).
-                let raw = without_verbatim_disk(&body.path);
+                let raw = scope::slash_disk(without_verbatim_disk(&body.path));
                 if !plain_local_spelling(raw) {
                     return Response::error(403, "forbidden", "path spelling not allowed");
                 }
@@ -249,7 +249,8 @@ impl HostHttp {
         if !Path::new(raw).is_absolute() {
             return Response::error(400, "bad_request", "path must be absolute");
         }
-        let clean = super::preference_media::clean_native_path(raw, cfg!(windows));
+        let clean =
+            super::preference_media::clean_native_path(scope::slash_disk(raw), cfg!(windows));
         let target = Path::new(&clean);
         if !self.trial_allowed(target)
             || (auth::logically_remote(r) && !self.remote_list_allowed(target))
@@ -341,14 +342,12 @@ impl HostHttp {
     }
     fn open_dir(&self, r: &Request, body: Body) -> Response {
         if body.kind == "path" {
-            if let Err(response) = self.allowed(r, &body.path, true) {
+            let path = scope::slash_disk(&body.path);
+            if let Err(response) = self.allowed(r, path, true) {
                 return response;
             }
-            return match self
-                .dispatch
-                .open(OpenKind::Reveal, Path::new(&body.path), "")
-            {
-                Ok(()) => Response::json(200, &serde_json::json!({"ok":true,"path":body.path})),
+            return match self.dispatch.open(OpenKind::Reveal, Path::new(path), "") {
+                Ok(()) => Response::json(200, &serde_json::json!({"ok":true,"path":path})),
                 Err(error) => Response::error(500, "open_failed", &format!("open failed: {error}")),
             };
         }

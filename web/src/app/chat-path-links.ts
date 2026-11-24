@@ -1,5 +1,6 @@
 // チャット表示の本文（URL 以外の区間）から、ファイルパスとして扱う部分を切り出す。
 // DOM には触らない。描画は chat-history.ts が行う。
+import { foldSlashDisk } from './path-detect.js';
 
 export type ChatTextPiece = { text: string; path?: string };
 
@@ -41,7 +42,7 @@ export function splitChatPaths(text: string): ChatTextPiece[] {
     if (!token) {
       pieces.push({ text: m[0] });
     } else {
-      pieces.push({ text: token, path: token });
+      pieces.push({ text: token, path: foldSlashDisk(token) });
       if (trail) pieces.push({ text: trail });
     }
     last = m.index + m[0].length;
