@@ -360,8 +360,9 @@ fn drop_registered_mode_when_children_are_attended(
 /// bypassPermissions always hit "risk confirmation required" (a 500). An
 /// autonomous request is never confirmed this way, and `child_full_bypass:
 /// false` keeps refusing high-risk modes for children. The launch
-/// ([`prepare_with`]) and the dialog ([`preview_tiers`]) both ask this one
-/// function, so the dialog never discloses a different confirmation.
+/// ([`prepare_with`]) and the previews ([`preview_tiers`], and the dialog's
+/// [`preview_tiers_for_confirmation`]) all ask this one function, so the
+/// dialog never discloses a different confirmation.
 fn registered_mode_is_human_confirmed(
     request: &ChildSpawnRequest,
     is_human: bool,
@@ -420,8 +421,9 @@ pub fn prepare_with(
     Ok(body)
 }
 
-/// The dialog enumerates every provider/tier using the same table and ordering
-/// as preparation. Unsupported explicit headless requests remain visible here;
+/// Enumerates every provider/tier using the same table and ordering as
+/// preparation, for the body's own verified origin (the dialog previews the
+/// approved launch through [`preview_tiers_for_confirmation`]). Unsupported explicit headless requests remain visible here;
 /// actual preparation returns the source error instead of silently downgrading.
 /// `providers` must be the same registry reading the launch uses, so a
 /// registered provider's own `launch.headless` counts here exactly as it does in
@@ -435,6 +437,28 @@ pub fn preview_tiers(
         body.request(),
         launch_origin(body.origin()),
         body.origin().is_human(),
+        body.grants().allowed_tools(),
+        cfg,
+        providers,
+    )
+}
+/// The spawn confirmation dialog's disclosure. The pending request is the
+/// autonomous one the AI sent, but the dialog shows what will start once a
+/// person approves it: [`ResolvedChildSpawn::approve`] turns the origin into
+/// `HumanConfirmation`, which [`launch_origin`] maps to the conductor origin
+/// and which counts as human. Previewing with the request's own (autonomous)
+/// origin hid the risk confirmation a registered provider's mode receives at
+/// that launch. A launch that skips the dialog is never previewed here, so this
+/// never shows an autonomous launch as confirmed.
+pub fn preview_tiers_for_confirmation(
+    body: &ResolvedChildSpawn,
+    cfg: &Config,
+    providers: &RegisteredProviders,
+) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
+    preview_for(
+        body.request(),
+        config::LAUNCH_ORIGIN_CONDUCTOR,
+        true,
         body.grants().allowed_tools(),
         cfg,
         providers,
@@ -1125,7 +1149,7 @@ mod tests {
                 }
             }
         }
-        // The case the dialog used to get wrong: a person's bypassPermissions.
+        // A person's bypassPermissions, once approved.
         let body = request(&serde_json::json!({
             "provider": "fixture-plain",
             "permission_mode": "bypassPermissions",
@@ -1133,6 +1157,69 @@ mod tests {
         }));
         assert!(
             preview_tiers(&body, &Config::default(), &providers)["fixture-plain"][""]
+                .risk_confirmed
+        );
+    }
+
+    /// The dialog is built from the pending request before anyone approves it,
+    /// so its origin is still autonomous. Previewing that origin showed a
+    /// registered provider's bypassPermissions as not risk-confirmed (no
+    /// "high-risk permission confirmed" warning), while the launch the person
+    /// was approving treated it as confirmed. The dialog now previews the
+    /// approved launch: the same disclosure as the approved body, for every
+    /// provider and tier, and the same `risk_confirmed` as its launch.
+    #[test]
+    fn the_confirmation_dialog_previews_the_launch_its_approval_starts() {
+        let providers = registered();
+        for full_bypass in [None, Some(false)] {
+            let cfg = Config {
+                orchestration: OrchestrationConfig {
+                    child_full_bypass: full_bypass,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            for provider in ["fixture-plain", "claude", "codex"] {
+                for mode in ["", "default", "acceptEdits", "bypassPermissions"] {
+                    for preset in ["", "attended", "bounded", "full"] {
+                        let pending = request(&serde_json::json!({
+                            "provider": provider,
+                            "permission_mode": mode,
+                            "preset": preset,
+                        }));
+                        assert!(!pending.origin().is_human());
+                        let approved = request(&serde_json::json!({
+                            "provider": provider,
+                            "permission_mode": mode,
+                            "preset": preset,
+                            "confirmed": true,
+                        }));
+                        let case = format!("{full_bypass:?} {provider} {mode:?} {preset:?}");
+                        let dialog = preview_tiers_for_confirmation(&pending, &cfg, &providers);
+                        assert_eq!(
+                            serde_json::to_value(&dialog).unwrap(),
+                            serde_json::to_value(preview_tiers(&approved, &cfg, &providers))
+                                .unwrap(),
+                            "{case}"
+                        );
+                        let launched = prepare_with(approved, &cfg, &providers)
+                            .unwrap()
+                            .request()
+                            .risk_confirmed;
+                        assert_eq!(dialog[provider][preset].risk_confirmed, launched, "{case}");
+                    }
+                }
+            }
+        }
+        // The case the dialog used to get wrong.
+        let pending = request(&serde_json::json!({
+            "provider": "fixture-plain",
+            "permission_mode": "bypassPermissions",
+        }));
+        let cfg = Config::default();
+        assert!(!preview_tiers(&pending, &cfg, &providers)["fixture-plain"][""].risk_confirmed);
+        assert!(
+            preview_tiers_for_confirmation(&pending, &cfg, &providers)["fixture-plain"][""]
                 .risk_confirmed
         );
     }

@@ -412,7 +412,9 @@ fn requested_message(
         permission_mode: body.permission_mode.clone(),
         // Go's UnixMilli uses floor division for pre-epoch timestamps.
         spawn_requested_at_ms: requested_at.unix_nanos().div_euclid(1_000_000) as i64,
-        spawn_child_approval: child_options::preview_tiers(
+        // Disclose the launch the approval will start (a confirmed human launch),
+        // not the autonomous request still waiting for it.
+        spawn_child_approval: child_options::preview_tiers_for_confirmation(
             resolved,
             &disclosure.config,
             &disclosure.child_providers,

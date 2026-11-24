@@ -326,6 +326,52 @@ async fn registration_uses_live_disclosure_and_negative_logical_millisecond_floo
             .admission_matches(&r.pending.admission, f.parent.session, 1)
     );
 }
+/// The dialog is published before anyone approves, from the AI's autonomous
+/// request. It must still disclose the launch the approval starts: a
+/// registered CLI's bypassPermissions is risk-confirmed there (with
+/// `child_full_bypass` on), so the dialog shows the high-risk warning too.
+#[tokio::test]
+async fn the_requested_dialog_discloses_the_risk_confirmation_of_the_approved_launch() {
+    let f = fixture(true).await;
+    let provider = "synthetic-registered";
+    let mut req = request(f.parent.session, "worker");
+    req.requested_provider = provider.into();
+    let mut body = req.body.request().clone();
+    body.provider = provider.into();
+    body.effort.clear();
+    body.permission_mode = "bypassPermissions".into();
+    req.body =
+        ResolvedChildSpawn::from_request(body, None, InternalSpawnGrants::default()).unwrap();
+    assert!(!req.body.origin().is_human());
+    let r = SpawnConfirmations::register(f.engine.as_ref(), req).unwrap();
+    let wire = messages(&r.effects)[0];
+    let presentation = f.executor.presentation().unwrap();
+    assert!(
+        presentation
+            .config
+            .orchestration
+            .child_full_bypass_enabled()
+    );
+    let disclosed = wire.spawn_child_approval[provider]
+        .as_ref()
+        .expect("registered provider disclosed")[""]
+        .risk_confirmed;
+    assert!(disclosed);
+    let launched = child_options::prepare_with(
+        r.pending
+            .body
+            .clone()
+            .approve(
+                &response(&r.pending.id, true),
+                VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch()),
+            )
+            .unwrap(),
+        &presentation.config,
+        &presentation.child_providers,
+    )
+    .unwrap();
+    assert_eq!(launched.request().risk_confirmed, disclosed);
+}
 #[tokio::test]
 async fn replacement_orders_close_before_request_and_completes_unstarted_waiter() {
     let f = fixture(true).await;
