@@ -190,6 +190,8 @@ Release artifacts are published at
   named by day and number (`s20261116-6.jsonl`), and the handoff list opens
   each one by that name. Records written by earlier versions are read as they
   are and are not renamed or rewritten (#44).
+- With the session-list tab bar on the left or right, the add-tab button now
+  sits right after the last tab instead of at the bottom of the rail.
 
 ### Security
 

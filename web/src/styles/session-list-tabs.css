@@ -71,7 +71,8 @@ dialog.session-list-tab-dialog:not([open]) {
   #session-list.tabs-vertical > .aac-wheel-overlay:not([hidden]) { grid-column: cards; grid-row: 3; max-height: 45vh; }
   #session-list.tabs-vertical > #sessions { grid-column: cards; grid-row: 4; }
   #session-list.tabs-vertical > .session-footer { grid-row: 5; }
-  #session-list.tabs-vertical #session-list-tabs { flex-direction: column; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  #session-list.tabs-vertical #session-list-tabs { flex-direction: column; flex: 0 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  #session-list.tabs-vertical .session-tab-position-control { margin-top: auto; }
   #session-list.tabs-vertical .session-list-tab { min-width: 40px; max-width: 112px; border-bottom: 1px solid transparent; border-right: 2px solid transparent; border-radius: var(--radius-md) 0 0 var(--radius-md); touch-action: pan-y; }
   #session-list.tabs-vertical .session-list-tab[aria-selected="true"] { border-bottom-color: transparent; border-right-color: var(--accent); }
   #session-list[data-tab-position="right"] .session-list-tab { border-width: 1px 1px 1px 2px; border-radius: 0 var(--radius-md) var(--radius-md) 0; }
