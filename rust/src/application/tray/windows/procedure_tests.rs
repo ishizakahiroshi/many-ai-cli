@@ -75,11 +75,11 @@ impl SyntheticWindow {
         owner
             .test_exit_answer
             .store(answer == native::IDYES, Ordering::Release);
-        let presence = Box::new(PresenceWindow {
+        let presence = Box::new(presence_window(
             owner,
-            status: std::ptr::without_provenance_mut(3),
-            text: presence_copy(0x11),
-        });
+            std::ptr::without_provenance_mut(3),
+            presence_copy(0x11),
+        ));
         let calls = Arc::new(Mutex::new(Vec::new()));
         let previous = WINDOW.with(|slot| {
             slot.replace(Some(WindowData {
@@ -428,6 +428,7 @@ async fn replace_request_migrates_on_the_forwarded_port() {
 fn presence_copy_follows_the_four_primary_languages() {
     let japanese = presence_copy(0x0411);
     assert_eq!(japanese.running, "動いています");
+    assert_eq!(japanese.minimize, "しまう");
     assert_eq!(japanese.stopped, "止まっています");
     assert_eq!(japanese.open, "ブラウザを開く");
     assert_eq!(japanese.stop, "終了");
@@ -440,6 +441,7 @@ fn presence_copy_follows_the_four_primary_languages() {
         "すべてのAIの作業を終了し、many-ai-cliを閉じます。"
     );
     let english = presence_copy(0x0409);
+    assert_eq!(english.minimize, "Minimize");
     assert_eq!(english.running, "Running");
     assert_eq!(english.stopped, "Stopped");
     assert_eq!(english.open, "Open browser");
@@ -450,6 +452,7 @@ fn presence_copy_follows_the_four_primary_languages() {
         "All AI sessions will end and many-ai-cli will close."
     );
     let vietnamese = presence_copy(0x042a);
+    assert_eq!(vietnamese.minimize, "Thu nhỏ");
     assert_eq!(vietnamese.running, "Đang chạy");
     assert_eq!(vietnamese.stopped, "Đã dừng");
     assert_eq!(vietnamese.open, "Mở trình duyệt");
@@ -542,7 +545,61 @@ async fn presence_window_button_and_close_share_confirmed_exit() {
             NativeCall::Text("止まっています".into()),
         ]
     );
+    hooks.calls.lock().unwrap().clear();
+    assert_eq!(
+        unsafe { presence_procedure(handle, WM_COMMAND, MINIMIZE_COMMAND as usize, 0) },
+        0
+    );
+    assert_eq!(window.calls().last(), Some(&NativeCall::Minimize));
+    assert!(hooks.calls.lock().unwrap().is_empty());
     owner.shutdown().await;
+}
+
+#[test]
+fn presence_card_stays_narrow_and_follows_the_theme_inputs() {
+    assert!(PRESENCE_WIDTH < 360);
+    assert!(PRESENCE_HEIGHT < 160);
+    let layout = card_layout(PRESENCE_WIDTH, PRESENCE_HEIGHT, 96);
+    assert!(layout.mark.x < layout.title.x);
+    assert!(layout.mark.x + layout.mark.w <= layout.title.x);
+    assert_eq!(layout.mark.w, layout.mark.h);
+    assert!(layout.mark.w < layout.minimize.w);
+    assert!(layout.minimize.x > layout.title.x);
+    assert_eq!(layout.minimize.y, layout.title.y);
+    assert!(layout.open.w > layout.exit.w);
+    assert!(layout.open.x + layout.open.w <= layout.exit.x);
+    assert!(layout.exit.x + layout.exit.w <= PRESENCE_WIDTH);
+    assert!(layout.open.y > layout.status.y);
+    let wide = card_layout(PRESENCE_WIDTH * 2, PRESENCE_HEIGHT * 2, 192);
+    assert_eq!(wide.mark.w, layout.mark.w * 2);
+    assert_eq!(wide.open.w, layout.open.w * 2);
+    assert_eq!(wide.exit.w, layout.exit.w * 2);
+    let light = palette_for(Some(1), None);
+    let missing = palette_for(None, None);
+    let dark = palette_for(Some(0), None);
+    assert_eq!(light.background, missing.background);
+    assert_ne!(light.background, dark.background);
+    assert!(color_is_dark(dark.background));
+    assert!(!color_is_dark(light.background));
+    let contrast = palette_for(
+        Some(0),
+        Some(SystemColors {
+            window: 1,
+            text: 2,
+            highlight: 3,
+            highlight_text: 4,
+            face: 5,
+            button_text: 6,
+            frame: 7,
+        }),
+    );
+    assert_eq!(contrast.background, 1);
+    assert_eq!(contrast.title, 2);
+    assert_eq!(contrast.primary_fill, 3);
+    assert_eq!(contrast.primary_text, 4);
+    assert_eq!(contrast.secondary_fill, 5);
+    assert_eq!(contrast.quiet_mark, 6);
+    assert_eq!(contrast.border, 7);
 }
 
 #[tokio::test(flavor = "current_thread")]
