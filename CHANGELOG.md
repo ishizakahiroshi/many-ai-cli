@@ -192,6 +192,10 @@ Release artifacts are published at
   are and are not renamed or rewritten (#44).
 - With the session-list tab bar on the left or right, the add-tab button now
   sits right after the last tab instead of at the bottom of the rail.
+- Count badges on the sidebar's session-list tabs and on the approval and
+  chat view tabs now overlay the tab's top-right corner instead of taking
+  space inside it, so neighboring tabs no longer shift when a badge appears
+  or disappears.
 
 ### Security
 

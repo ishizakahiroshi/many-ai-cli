@@ -472,19 +472,22 @@ export function renderSessionListTabs(): void {
     button.title = tab.name;
     const name = document.createElement('span'); name.className = 'session-list-tab-name'; name.textContent = tab.name;
     button.append(name);
+    // Badges sit in an absolutely-positioned corner slot so appearing/removing them never resizes the tab.
+    const badges = document.createElement('span'); badges.className = 'session-list-tab-badges';
     const count = counts.get(tab.id) || 0;
     if (count && !selected) {
       const badge = document.createElement('span'); badge.className = 'session-list-tab-waiting'; badge.textContent = String(count);
       const label = tx('session_list_tab_waiting', '{count} waiting for a response', { count });
-      badge.setAttribute('aria-label', label); button.title += ` · ${label}`; button.append(badge);
+      badge.setAttribute('aria-label', label); button.title += ` · ${label}`; badges.append(badge);
     }
     // Outlined, unlike the tinted waiting badge, so the two stay distinct without relying on color.
     const stoppedCount = stoppedCounts.get(tab.id) || 0;
     if (stoppedCount && !selected) {
       const badge = document.createElement('span'); badge.className = 'session-list-tab-stopped'; badge.textContent = String(stoppedCount);
       const label = tx('session_list_tab_stopped', '{count} finished, not opened yet', { count: stoppedCount });
-      badge.setAttribute('aria-label', label); button.title += ` · ${label}`; button.append(badge);
+      badge.setAttribute('aria-label', label); button.title += ` · ${label}`; badges.append(badge);
     }
+    if (badges.children.length) button.append(badges);
     parent.append(button);
   }
   parent.scrollLeft = x; parent.scrollTop = y;

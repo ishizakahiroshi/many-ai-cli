@@ -472,18 +472,24 @@ body.pane-resizing .xterm { pointer-events: none; }
 .view-tab:hover:not(.active).ui-button {
   --ui-button-fg: var(--text);
 }
+/* 件数バッジはタブの中身と一緒に流さず右上の角へ重ねる。流れに置くと、出たり消えたりで
+   タブの幅と後ろのタブの位置が動く（session-list-tabs.css の session-list-tab-badges と同じ方式）。 */
 .view-tab .badge {
+  position: absolute;
+  top: 1px;
+  right: 2px;
   display: inline-flex;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-elev));
   color: var(--accent-text);
   font-size: var(--header-font-size);
   font-weight: normal;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }/* Files/Git lazy (未取得) — dim 表示 */
 .view-tab.lazy.ui-button { --ui-button-fg: color-mix(in srgb, var(--muted) 60%, transparent); }
 .view-tab.lazy:hover.ui-button { --ui-button-fg: var(--muted); }
