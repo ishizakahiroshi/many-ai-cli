@@ -15,6 +15,8 @@
 .prompt-template-item { flex: 1 1 auto; min-width: 0; width: 100%; overflow: hidden; padding: 8px   ;  text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 /* メニュー項目は flex だが、flex の中の文字には … の省略が効かないので、この行だけ block に戻す。 */
 .ui-button.prompt-template-item { display: block; }
+/* 目印ラベルは本文の直前に小さく出す。行頭にあるので、幅が狭く本文が末尾省略されても目印側は残る。 */
+.prompt-template-item-label { margin-right: .45em; color: var(--muted); font-size: var(--fs-xs); }
 
 .prompt-template-actions { display: flex; flex: 0 0 auto; gap: 2px; opacity: 0; transition: opacity .12s; }
 .prompt-template-row:hover .prompt-template-actions, .prompt-template-row:focus-within .prompt-template-actions { opacity: 1; }
@@ -23,6 +25,7 @@
 }
 
 .prompt-template-editor { display: grid; gap: 5px; width: 100%; }
+.prompt-template-editor-label { width: 100%; box-sizing: border-box; padding: 7px 8px; }
 .prompt-template-editor-input { width: 100%; min-height: 62px; resize: vertical; box-sizing: border-box; padding: 7px 8px; line-height: 1.45; }
 .prompt-template-editor-actions { display: flex; justify-content: flex-end; gap: 5px; }
 
@@ -52,9 +55,11 @@
   #prompt-template-list { max-height: 42dvh; }
   .prompt-template-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 2px 4px; padding-block: 6px; border-bottom: 1px solid var(--line-soft); }
   #prompt-template-search { min-height: 44px; font-size: 16px; }
-  .prompt-template-item { min-height: 48px; white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+  .prompt-template-item { min-height: 48px; line-height: 1.5; }
+  .prompt-template-editor { grid-column: 1 / -1; }
   .prompt-template-action, .prompt-template-drag { min-width: 44px; min-height: 44px; opacity: 1; }
   .prompt-template-actions { grid-column: 2; justify-content: flex-end; opacity: 1; }
   .prompt-template-editor-input { font-size: 16px; }
+  .prompt-template-editor-label { font-size: 16px; }
   .prompt-template-editor-actions button, .prompt-template-add, .prompt-template-undo button { min-height: 44px; }
 }

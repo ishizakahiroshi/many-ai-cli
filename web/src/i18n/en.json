@@ -196,6 +196,7 @@
   "template_save": "Save",
   "template_cancel": "Cancel",
   "template_body_placeholder": "Template text",
+  "template_label_placeholder": "Label (optional)",
   "template_body_required": "Enter template text",
   "template_duplicate": "A template with the same text already exists",
   "template_add_failed": "Could not add the template",

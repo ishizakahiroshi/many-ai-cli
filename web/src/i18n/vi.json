@@ -196,6 +196,7 @@
   "template_save": "Lưu",
   "template_cancel": "Hủy",
   "template_body_placeholder": "Nội dung mẫu",
+  "template_label_placeholder": "Nhãn (tùy chọn)",
   "template_body_required": "Nhập nội dung mẫu",
   "template_duplicate": "Đã có mẫu với cùng nội dung",
   "template_add_failed": "Không thể thêm mẫu",

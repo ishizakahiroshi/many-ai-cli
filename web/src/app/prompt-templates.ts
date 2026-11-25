@@ -1,5 +1,5 @@
 import { t } from '../i18n.js';
-import { STORAGE_TEMPLATES_KEY, STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, setUserPref, refreshSharedPromptTemplates, setSharedTemplateEditing, sharedTemplatesHaveConflict, resolveSharedTemplateConflict } from './user-prefs.js';
+import { STORAGE_TEMPLATES_KEY, STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, normalizeTemplateLabel, setUserPref, refreshSharedPromptTemplates, setSharedTemplateEditing, sharedTemplatesHaveConflict, resolveSharedTemplateConflict } from './user-prefs.js';
 import { activeSessionId, sessions } from './state.js';
 import { showToast } from './util.js';
 
@@ -7,7 +7,7 @@ const MAX_TEMPLATES = 100;
 const MAX_BODY_LENGTH = 8000;
 const MOBILE_LABEL_LENGTH = 5;
 
-export type PromptTemplate = { body: string; providers: string[]; tags: string[] };
+export type PromptTemplate = { body: string; providers: string[]; tags: string[]; display_label?: string };
 
 const DEFAULT_TEMPLATES: PromptTemplate[] = [
   { body: '変更内容を確認して、PR を作成できる状態まで進めてください。', providers: [], tags: ['git'] },
@@ -28,13 +28,18 @@ function normalize(raw: unknown): PromptTemplate[] {
   return raw
     .filter((v): v is Record<string, unknown> => !!v && typeof v === 'object' && typeof v.body === 'string')
     .slice(0, MAX_TEMPLATES)
-    .map((v) => ({
+    .map((v) => {
       // label / frequency は旧保存データとの互換のため読み飛ばす。body が正本で、
       // 並び順は配列そのものが正本（frequency による自動ソートは廃止）。
-      body: normalizeBody(v.body),
-      providers: Array.isArray(v.providers) ? v.providers.filter((p): p is string => typeof p === 'string').slice(0, 10) : [],
-      tags: Array.isArray(v.tags) ? v.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 10) : [],
-    }))
+      // 表示用の目印は新フィールド display_label だけを使い、旧 label は表示へ復活させない。
+      const displayLabel = normalizeTemplateLabel(v.display_label);
+      return {
+        body: normalizeBody(v.body),
+        providers: Array.isArray(v.providers) ? v.providers.filter((p): p is string => typeof p === 'string').slice(0, 10) : [],
+        tags: Array.isArray(v.tags) ? v.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 10) : [],
+        ...(displayLabel ? { display_label: displayLabel } : {}),
+      };
+    })
     .filter((v) => v.body);
 }
 
@@ -58,12 +63,15 @@ function save(templates: PromptTemplate[]): void {
   notifyTemplatesChanged();
 }
 
-export function addPromptTemplate(body: string): boolean {
+export function addPromptTemplate(body: string, label = ''): boolean {
   const normalized = normalizeBody(body);
   if (!normalized) return false;
   const templates = getPromptTemplates();
   if (templates.length >= MAX_TEMPLATES || templates.some((template) => template.body === normalized)) return false;
-  templates.push({ body: normalized, providers: [], tags: [] });
+  const displayLabel = normalizeTemplateLabel(label);
+  templates.push(displayLabel
+    ? { body: normalized, providers: [], tags: [], display_label: displayLabel }
+    : { body: normalized, providers: [], tags: [] });
   save(templates);
   return true;
 }
@@ -106,8 +114,10 @@ export function insertPromptTemplate(template: PromptTemplate): void {
 type UndoState = { template: PromptTemplate; index: number };
 let editingBody: string | null = null;
 let editDraft = '';
+let editLabelDraft = '';
 let adding = false;
 let addDraft = '';
+let addLabelDraft = '';
 let undoState: UndoState | null = null;
 // 掴んでいる間の再描画抑止（renderPalette が行を作り直すと掴みが外れるため）。
 let draggingRow: HTMLElement | null = null;
@@ -272,6 +282,17 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
   const editor = document.createElement('div');
   editor.className = 'prompt-template-editor';
 
+  const labelInput = document.createElement('input');
+  labelInput.type = 'text';
+  labelInput.className = 'ui-input prompt-template-editor-label';
+  labelInput.placeholder = text('template_label_placeholder', 'ラベル（任意）');
+  labelInput.setAttribute('aria-label', text('template_label_placeholder', 'ラベル（任意）'));
+  labelInput.value = mode === 'edit' ? editLabelDraft : addLabelDraft;
+  labelInput.addEventListener('input', () => {
+    if (mode === 'edit') editLabelDraft = labelInput.value;
+    else addLabelDraft = labelInput.value;
+  });
+
   const textarea = document.createElement('textarea');
   textarea.rows = 3;
   textarea.maxLength = MAX_BODY_LENGTH;
@@ -302,15 +323,17 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
       textarea.focus();
       return;
     }
+    const label = normalizeTemplateLabel(labelInput.value);
     if (mode === 'add') {
       if (getPromptTemplates().some((candidate) => candidate.body === body)) {
         showToast(text('template_duplicate', '同じ内容のテンプレートがあります'));
         textarea.focus();
         return;
       }
-      if (addPromptTemplate(body)) {
+      if (addPromptTemplate(body, label)) {
         adding = false;
         addDraft = '';
+        addLabelDraft = '';
         renderPalette();
       } else {
         showToast(text('template_add_failed', 'テンプレートを追加できませんでした'));
@@ -326,9 +349,14 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
       textarea.focus();
       return;
     }
-    templates[index] = { ...templates[index], body };
+    // 空欄は未設定として保存し、既存の display_label も消す。
+    const next: PromptTemplate = { ...templates[index], body };
+    if (label) next.display_label = label;
+    else delete next.display_label;
+    templates[index] = next;
     editingBody = null;
     editDraft = '';
+    editLabelDraft = '';
     save(templates);
   });
 
@@ -337,15 +365,17 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
     if (mode === 'add') {
       adding = false;
       addDraft = '';
+      addLabelDraft = '';
     } else {
       editingBody = null;
       editDraft = '';
+      editLabelDraft = '';
     }
     renderPalette();
   });
 
   actions.append(saveButton, cancelButton);
-  editor.append(textarea, actions);
+  editor.append(labelInput, textarea, actions);
   row.append(editor);
   requestAnimationFrame(() => {
     textarea.focus();
@@ -363,8 +393,19 @@ function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HT
   selectButton.type = 'button';
   selectButton.className = 'ui-button ui-button--quiet ui-button--compact ui-button--menu-item prompt-template-item';
   selectButton.setAttribute('role', 'menuitem');
-  selectButton.textContent = template.body;
-  selectButton.title = template.body;
+  if (template.display_label) {
+    const labelEl = document.createElement('span');
+    labelEl.className = 'prompt-template-item-label';
+    labelEl.textContent = template.display_label;
+    const bodyEl = document.createElement('span');
+    bodyEl.className = 'prompt-template-item-body';
+    bodyEl.textContent = template.body;
+    selectButton.append(labelEl, bodyEl);
+    selectButton.title = `${template.display_label} ${template.body}`;
+  } else {
+    selectButton.textContent = template.body;
+    selectButton.title = template.body;
+  }
   selectButton.addEventListener('click', () => {
     insertPromptTemplate(template);
     closePalette(panel);
@@ -378,6 +419,7 @@ function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HT
       event.stopPropagation();
       editingBody = template.body;
       editDraft = template.body;
+      editLabelDraft = template.display_label ?? '';
       renderPalette();
     }),
     makeActionButton('✕', text('template_delete', '削除'), (event) => {
@@ -388,7 +430,7 @@ function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HT
       if (index < 0) return;
       const deleted = templates.splice(index, 1)[0];
       undoState = deleted ? { template: deleted, index } : null;
-      if (editingBody === template.body) editingBody = null;
+      if (editingBody === template.body) { editingBody = null; editLabelDraft = ''; }
       save(templates);
     }),
   );
@@ -469,6 +511,7 @@ function renderPalette(): void {
       event.stopPropagation();
       adding = true;
       addDraft = '';
+      addLabelDraft = '';
       renderPalette();
     });
     list.append(addButton);

@@ -196,6 +196,7 @@
   "template_save": "保存",
   "template_cancel": "キャンセル",
   "template_body_placeholder": "テンプレート本文",
+  "template_label_placeholder": "ラベル（任意）",
   "template_body_required": "本文を入力してください",
   "template_duplicate": "同じ内容のテンプレートがあります",
   "template_add_failed": "テンプレートを追加できませんでした",

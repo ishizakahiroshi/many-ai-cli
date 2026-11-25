@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "2be020a0aba97334eafd212de2c365b5116015f0",
-    "dirty": false,
+    "commit": "20f2cd1b3c2357aaccec4653fa55e30a44f34bdf",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2158,
-    "analyzed": 1696,
+    "discovered": 2161,
+    "analyzed": 1699,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -43609,6 +43609,33 @@
       "unresolved": []
     },
     {
+      "path": "scripts/rust-local-build.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Build away from the executable paths used by running Hubs to spawn wrappers."
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "scripts/rust-local-source.ps1",
       "adapter": "powershell",
       "status": "analyzed",
@@ -43930,6 +43957,33 @@
         "writes": {
           "state": "none_observed",
           "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/test-rust-local-build.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Failure injection against disposable artifacts. No Rust build or Hub operation."
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
         },
         "screen_to_api": {
           "state": "out_of_scope"
@@ -52812,6 +52866,36 @@
     },
     {
       "path": "web/tests/probe.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/prompt-templates.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

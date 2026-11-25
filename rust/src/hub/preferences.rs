@@ -128,6 +128,8 @@ fn save_error(error: ConfigError) -> Response {
 #[derive(Serialize)]
 struct TemplateWire<'a> {
     label: &'a str,
+    #[serde(skip_serializing_if = "str_is_empty")]
+    display_label: &'a str,
     body: &'a str,
     #[serde(skip_serializing_if = "slice_is_empty")]
     providers: &'a [String],
@@ -137,11 +139,15 @@ struct TemplateWire<'a> {
 fn slice_is_empty<T>(slice: &&[T]) -> bool {
     slice.is_empty()
 }
+fn str_is_empty(value: &&str) -> bool {
+    value.is_empty()
+}
 pub fn template_version(templates: &[UserPrefsTemplate]) -> String {
     let wire: Vec<_> = templates
         .iter()
         .map(|template| TemplateWire {
             label: &template.label,
+            display_label: &template.display_label,
             body: &template.body,
             providers: &template.providers,
             tags: &template.tags,

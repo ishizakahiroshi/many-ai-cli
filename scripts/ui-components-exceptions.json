@@ -6867,6 +6867,17 @@
       "reason": "content-label-or-indicator: The broad guard matched a content label, placeholder, badge, focus/state indicator or native specialized control; it does not replace common ordinary controls. Reviewed font-size=16px at .prompt-template-editor-input."
     },
     {
+      "file": "web/src/styles/prompt-templates.css",
+      "selector": ".prompt-template-editor-label",
+      "context": "@media (max-width: 720px)",
+      "property": "font-size",
+      "value": "16px",
+      "rule": "literal-font-size",
+      "fingerprint": "78fb66b16631dba4e5c2e74226e2da8c8f59705563d736a1597c01780f3d34b3",
+      "count": 1,
+      "reason": "mobile-input-zoom: 16px input text prevents focus zoom on mobile browsers; this is an accessibility exception for text entry. Reviewed font-size=16px at .prompt-template-editor-label."
+    },
+    {
       "file": "web/src/styles/review.css",
       "selector": ".git-turn-card",
       "context": "",

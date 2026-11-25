@@ -396,6 +396,35 @@ export const _USER_PREFS_NUMBER_ARRAY_PATHS = new Set([
   'session_order',
 ]);
 
+// テンプレートの目印ラベルの最大長。クイックコマンドの任意ラベルと同じ 12。
+const TEMPLATE_LABEL_MAX_GRAPHEMES = 12;
+// テンプレートの目印ラベルを 1 行・制御文字なし・最大長に整える。空なら ''（未設定）。
+// 絵文字の結合列（ZWJ・異体字等）は保存時に分断しないよう、上限は grapheme 単位で掛ける。
+export function normalizeTemplateLabel(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const cleaned = raw
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .trim();
+  if (!cleaned) return '';
+  let end = 0;
+  let count = 0;
+  if (typeof Intl.Segmenter === 'function') {
+    for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(cleaned)) {
+      end += segment.length;
+      if (++count === TEMPLATE_LABEL_MAX_GRAPHEMES) break;
+    }
+  } else {
+    // Keep flag pairs, emoji modifiers, variation selectors, tag sequences and ZWJ chains together.
+    const emojiOrCharacter = /(?:\p{Regional_Indicator}{2}|.)[\p{M}\p{Emoji_Modifier}\u{E0020}-\u{E007F}]*(?:\u200D.[\p{M}\p{Emoji_Modifier}\u{E0020}-\u{E007F}]*)*/gsu;
+    for (const [part] of cleaned.matchAll(emojiOrCharacter)) {
+      end += part.length;
+      if (++count === TEMPLATE_LABEL_MAX_GRAPHEMES) break;
+    }
+  }
+  return cleaned.slice(0, end);
+}
+
 // Palette edits are patches: an unrelated save must not replay another mode's
 // stale local colors over a reset made on a different device.
 const paletteEdits = new Map<string, number>();
@@ -464,11 +493,16 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   if (path === 'templates') {
     if (!Array.isArray(parsed)) return { ok: false };
     const value = parsed.filter((item) => item && typeof item === 'object' &&
-      typeof item.body === 'string').slice(0, 100).map((item) => ({
-      body: item.body.trim().slice(0, 8000),
-      providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
-      tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
-    })).filter((item) => item.body);
+      typeof item.body === 'string').slice(0, 100).map((item) => {
+      // 旧形式の label は表示へ復活させず読み飛ばす。任意の目印は display_label のみ保持する。
+      const displayLabel = normalizeTemplateLabel(item.display_label);
+      return {
+        body: item.body.trim().slice(0, 8000),
+        providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
+        tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
+        ...(displayLabel ? { display_label: displayLabel } : {}),
+      };
+    }).filter((item) => item.body);
     return { ok: true, value };
   }
   if (path === 'project_views') {

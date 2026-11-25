@@ -558,3 +558,97 @@ fn trial_preferences_persist_only_in_explicit_root() {
     assert!(!paths.resource(Resource::Avatar).exists());
     assert!(!paths.resource(Resource::NotifySound).exists());
 }
+
+#[test]
+fn display_label_round_trips_and_stays_optional() {
+    let f = fixture(json!({}), 0);
+    let saved = response(
+        &f,
+        &request(
+            "PUT",
+            r#"{"templates":[{"body":"audit","display_label":"🔍"},{"body":"plain"}]}"#,
+            "",
+            "",
+        ),
+    );
+    assert_eq!(saved.status, 200);
+    let templates = body(&saved)["templates"].as_array().unwrap().clone();
+    assert_eq!(templates[0]["display_label"], "🔍");
+    assert!(templates[1].get("display_label").is_none());
+    let persisted_templates = persisted(&f)["templates"].as_array().unwrap().clone();
+    assert_eq!(persisted_templates[0]["display_label"], "🔍");
+    assert!(persisted_templates[1].get("display_label").is_none());
+    // ラベルだけの変更でも version は変わる（同時編集の競合検出対象）。
+    let labelled = template_version(&f.store.snapshot().unwrap().config.user_prefs.templates);
+    let plain = template_version(&[
+        UserPrefsTemplate {
+            body: "audit".into(),
+            ..Default::default()
+        },
+        UserPrefsTemplate {
+            body: "plain".into(),
+            ..Default::default()
+        },
+    ]);
+    assert_ne!(labelled, plain);
+    let fetched = response(&f, &request("GET", "", "", ""));
+    assert_eq!(fetched.status, 200);
+    assert_eq!(body(&fetched)["templates"], Value::Array(templates));
+    // ラベルを消して保存するとフィールドごと消える（省略に戻る）。
+    let cleared = response(
+        &f,
+        &request(
+            "PUT",
+            r#"{"templates":[{"body":"audit"},{"body":"plain"}]}"#,
+            "",
+            "",
+        ),
+    );
+    assert_eq!(cleared.status, 200);
+    assert!(
+        body(&cleared)["templates"][0]
+            .get("display_label")
+            .is_none()
+    );
+    assert!(persisted(&f)["templates"][0].get("display_label").is_none());
+}
+
+#[test]
+fn label_only_change_is_a_template_conflict_change() {
+    let f = fixture(json!({"templates":[{"body":"original"}]}), 0);
+    let version = template_version(&f.store.snapshot().unwrap().config.user_prefs.templates);
+    // 他端末がラベルだけを先行して変更した状態を作る。
+    let mut snapshot = f.store.snapshot().unwrap();
+    snapshot.config.user_prefs.templates[0].display_label = "🔍".into();
+    f.store.persist(snapshot.revision, snapshot.config).unwrap();
+    // 旧バージョンを基にした compare はラベルだけの差でも競合になる。
+    let req = request(
+        "PUT",
+        r#"{"templates":[{"body":"local edit"}]}"#,
+        "compare",
+        &version,
+    );
+    let actual = response(&f, &req);
+    assert_eq!(actual.status, 409);
+    assert_eq!(body(&actual)["error"], "template_conflict");
+    assert_eq!(
+        f.store.snapshot().unwrap().config.user_prefs.templates[0].display_label,
+        "🔍"
+    );
+}
+
+#[test]
+fn legacy_label_loads_but_never_becomes_display_label() {
+    let prefs = config::decode_user_prefs_http_json(
+        r#"{"templates":[{"label":"legacy","body":"x"}]}"#.as_bytes(),
+    )
+    .unwrap();
+    assert_eq!(prefs.templates[0].label, "legacy");
+    assert!(prefs.templates[0].display_label.is_empty());
+    let f = fixture(json!({"templates":[{"label":"legacy","body":"x"}]}), 0);
+    let fetched = response(&f, &request("GET", "", "", ""));
+    assert_eq!(fetched.status, 200);
+    let template = &body(&fetched)["templates"][0];
+    assert_eq!(template["label"], "legacy");
+    assert!(template.get("display_label").is_none());
+}

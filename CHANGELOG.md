@@ -128,6 +128,12 @@ Release artifacts are published at
   folder and the model list command. Settings -> AI CLI integrations shows the
   same list for every row. Reading the remaining quota, switching subscription
   profiles and the sub-agent tree stay unsupported for a registered CLI.
+- **Prompt templates can carry an optional label** (up to 12 characters,
+  emoji work) that shows in front of the body in the template palette so
+  similar templates are easier to tell apart. Add or edit it in the
+  template's label field; leaving it blank means no label. Labels sync
+  across devices with the template list, and a label-only change is
+  detected in sync conflicts like any other edit.
 
 ### Changed
 
@@ -162,6 +168,9 @@ Release artifacts are published at
   maintenance.
 
 ### Fixed
+
+- On Windows, a failed local Rust build now leaves the previous executables
+  available, so a running Hub can still start child sessions.
 
 - At window widths around 1275px the top tab row is no longer cut off on the
   right, and the approval-mode menu of the new-session form no longer

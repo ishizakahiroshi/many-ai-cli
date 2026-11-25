@@ -153,6 +153,25 @@ describe('shared templates through actual user-prefs module',()=>{
     f.api.setUserPref('templates',rows('new-local'));release(response({templates:rows('old-response')},'version-2'));
     expect(await refreshing).toBe(false);expect(JSON.parse(f.storage.get(LIST)!)).toEqual(rows('new-local'));expect(f.storage.get(VERSION)).toBe('version-1');expect(f.storage.get(DIRTY)).toBe('1');
   });
+  test('display_label survives PUT and mirroring while legacy label is dropped',async()=>{
+    const f=fixture();await settle();
+    f.api.setUserPref('templates',[
+      {body:'audit',display_label:'🔍',providers:['codex'],tags:[]},
+      {body:'legacy',label:'old',providers:[],tags:[]},
+      {body:'blank',display_label:'   ',providers:[],tags:[]},
+    ]);
+    await f.api.flushUserPrefsPut();
+    const put=f.calls.findLast(call=>call.method==='PUT')!;
+    expect(put.body.templates[0].display_label).toBe('🔍');
+    expect(put.body.templates[1].display_label).toBeUndefined();
+    expect(put.body.templates[1].label).toBeUndefined();
+    expect(put.body.templates[2].display_label).toBeUndefined();
+    f.remote(put.body.templates,'version-2');
+    expect(await f.api.refreshSharedPromptTemplates()).toBe(true);
+    const mirrored=JSON.parse(f.storage.get(LIST)!);
+    expect(mirrored[0].display_label).toBe('🔍');
+    expect(mirrored[1].label).toBeUndefined();
+  });
   test('omitted and explicit empty remote lists both clear the last saved template',async()=>{
     for(const empty of [undefined,[]]){const f=fixture();await settle();f.remote(empty,'version-2');expect(await f.api.refreshSharedPromptTemplates()).toBe(true);expect(JSON.parse(f.storage.get(LIST)!)).toEqual([]);expect(f.storage.get(VERSION)).toBe('version-2');}
   });

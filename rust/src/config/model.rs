@@ -239,6 +239,8 @@ pub struct UserPrefsTemplate {
     pub providers: Vec<String>,
     #[serde(rename = "tags")]
     pub tags: Vec<String>,
+    #[serde(rename = "display_label")]
+    pub display_label: String,
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -1328,6 +1330,13 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
                 yaml: "tags",
                 json: "tags",
                 kind: "[]string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "display_label",
+                json: "display_label",
+                kind: "string",
                 yomit: true,
                 jomit: true,
             },
