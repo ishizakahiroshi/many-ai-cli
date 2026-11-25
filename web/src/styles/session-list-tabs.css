@@ -5,13 +5,16 @@
 #session-list > .session-footer { position: relative; bottom: auto; margin-top: 0; }
 #session-list-tab-bar { display: flex; align-items: stretch; gap: 3px; flex: 0 0 auto; min-width: 0; border-bottom: 1px solid var(--line); margin: 2px 0 7px; }
 #session-list-tabs { display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
-.session-list-tab { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-width: 52px; max-width: 160px; min-height: 34px; padding: 5px 9px; border: 1px solid transparent; border-bottom: 2px solid transparent; border-radius: var(--radius-md) var(--radius-md) 0 0; color: var(--muted); background: transparent; cursor: pointer; font: inherit; font-size: var(--fs-sm); touch-action: pan-x; }
+.session-list-tab { display: inline-flex; position: relative; align-items: center; gap: 5px; flex: 0 0 auto; min-width: 52px; max-width: 160px; min-height: 34px; padding: 5px 9px; border: 1px solid transparent; border-bottom: 2px solid transparent; border-radius: var(--radius-md) var(--radius-md) 0 0; color: var(--muted); background: transparent; cursor: pointer; font: inherit; font-size: var(--fs-sm); touch-action: pan-x; }
 .session-list-tab:hover { background: var(--bg-elev); color: var(--text); }
 .session-list-tab[aria-selected="true"] { border-bottom-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
 .session-list-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-list-tab-waiting { flex-shrink: 0; min-width: 15px; padding: 0 3px; border-radius: var(--radius-sm); color: var(--warning, #efc66d); background: color-mix(in srgb, var(--warning, #efc66d) 15%, transparent); font-size: 10px; }
+/* Count badges overlay the tab's top-right corner instead of sitting in the row: adding/removing
+   them used to change the tab width and push following tabs and the add button around. */
+.session-list-tab-badges { position: absolute; top: 1px; right: 2px; display: flex; gap: 2px; pointer-events: none; }
+.session-list-tab-waiting { min-width: 15px; padding: 0 3px; border-radius: var(--radius-sm); color: var(--warning, #efc66d); background: color-mix(in srgb, var(--warning, #efc66d) 15%, transparent); font-size: 10px; }
 /* Same color as the project header's standby chip; outlined so it differs from the waiting badge by shape too. */
-.session-list-tab-stopped { flex-shrink: 0; min-width: 15px; padding: 0 2px; border-radius: var(--radius-sm); color: var(--badge-standby-text, #cbd5e1); border: 1px solid color-mix(in srgb, var(--badge-standby-text, #cbd5e1) 70%, transparent); font-size: 10px; line-height: 11px; text-align: center; }
+.session-list-tab-stopped { min-width: 15px; padding: 0 2px; border-radius: var(--radius-sm); color: var(--badge-standby-text, #cbd5e1); border: 1px solid color-mix(in srgb, var(--badge-standby-text, #cbd5e1) 70%, transparent); font-size: 10px; line-height: 11px; text-align: center; }
 /* The same mark on the session card: its standby dot turns yellow until the session is opened, then goes
    back to the standby gray from styles.css (this file loads later). Yellow (--state-stop, the same color as the
    card's stopped-unseen frame in styles.css), not the approval orange (--state-appr). */

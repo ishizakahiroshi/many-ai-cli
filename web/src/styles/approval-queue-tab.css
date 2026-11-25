@@ -11,8 +11,11 @@
   display: none;
 }
 
-/* 承認タブボタンのバッジ */
+/* 承認タブボタンのバッジ。タブの中身と一緒に流さず右上の角へ重ねる（出し入れで幅が動かないように）。 */
 #approval-tab-badge {
+  position: absolute;
+  top: 1px;
+  right: 2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -24,6 +27,7 @@
   color: #111;
   font-size: var(--header-font-size);
   font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 #approval-tab-badge[hidden] { display: none !important; }
 

@@ -190,6 +190,10 @@ Release artifacts are published at
   named by day and number (`s20261116-6.jsonl`), and the handoff list opens
   each one by that name. Records written by earlier versions are read as they
   are and are not renamed or rewritten (#44).
+- Count badges on the sidebar's session-list tabs and on the approval and
+  chat view tabs now overlay the tab's top-right corner instead of taking
+  space inside it, so neighboring tabs no longer shift when a badge appears
+  or disappears.
 
 ### Security
 
