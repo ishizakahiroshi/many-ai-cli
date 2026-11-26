@@ -557,8 +557,10 @@ async fn presence_window_button_and_close_share_confirmed_exit() {
 
 #[test]
 fn presence_card_stays_narrow_and_follows_the_theme_inputs() {
-    assert!(PRESENCE_WIDTH < 360);
-    assert!(PRESENCE_HEIGHT < 160);
+    const {
+        assert!(PRESENCE_WIDTH < 360);
+        assert!(PRESENCE_HEIGHT < 160);
+    }
     let layout = card_layout(PRESENCE_WIDTH, PRESENCE_HEIGHT, 96);
     assert!(layout.mark.x < layout.title.x);
     assert!(layout.mark.x + layout.mark.w <= layout.title.x);
