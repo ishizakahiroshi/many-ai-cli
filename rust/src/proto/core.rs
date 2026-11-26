@@ -1313,6 +1313,23 @@ pub struct TranscriptSessionIdentity {
     pub native_log_path: String,
 }
 
+/// What it takes to judge whether a Codex session moved on to another rollout.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CodexThreadView {
+    pub identity: TranscriptSessionIdentity,
+    /// Other running Codex sessions.
+    pub peers: Vec<TranscriptSessionIdentity>,
+    pub released: Vec<ReleasedRollout>,
+}
+
+/// A rollout some session of this Hub was reading and none reads any more,
+/// with the time that was first seen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReleasedRollout {
+    pub path: String,
+    pub released_at: crate::proto::time::Timestamp,
+}
+
 /// Core owns one session map and serializes lifecycle/input/admission decisions.
 /// Returning effects does not send or persist them; apply in order after locks
 /// are released. Delayed work must validate its full binding at execution time.

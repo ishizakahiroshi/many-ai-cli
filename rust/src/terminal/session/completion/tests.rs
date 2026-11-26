@@ -121,6 +121,66 @@ async fn stale_routine_label_cannot_bypass_git_work_predicate() {
             .is_empty()
     );
 }
+#[tokio::test]
+async fn codex_thread_view_keeps_the_rollout_of_a_dismissed_session_as_released() {
+    let (root, engine, first, at) = fixture("codex").await;
+    let second = engine
+        .register(
+            RegisterRequest {
+                message: proto::Message {
+                    provider: "codex".into(),
+                    cwd: root.path().join("trial").to_string_lossy().into_owned(),
+                    pid: 8,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(2),
+            at,
+        )
+        .await
+        .unwrap()
+        .binding;
+    for (binding, name) in [(first, "first.jsonl"), (second, "second.jsonl")] {
+        engine
+            .apply_observation(
+                binding,
+                SessionObservation::Transcript {
+                    path: root.path().join(name),
+                    agent_session_id: String::new(),
+                    safe_offset: 0,
+                    grew_at: timestamp(at).unwrap(),
+                },
+                at,
+            )
+            .unwrap();
+    }
+    let view = |after: u64| {
+        engine
+            .codex_thread_follow_view(second, at + Duration::from_secs(after))
+            .unwrap()
+            .unwrap()
+    };
+    let both_running = view(0);
+    assert_eq!(both_running.peers.len(), 1);
+    assert!(both_running.released.is_empty());
+    engine.dismiss(first.session, at).unwrap();
+    let expected = vec![ReleasedRollout {
+        path: root
+            .path()
+            .join("first.jsonl")
+            .to_string_lossy()
+            .into_owned(),
+        released_at: at + Duration::from_secs(10),
+    }];
+    let after_close = view(10);
+    assert!(after_close.peers.is_empty());
+    assert_eq!(after_close.released, expected);
+    // The time it was first seen unread stays.
+    assert_eq!(view(20).released, expected);
+}
 struct Io;
 impl WrapperTransport for Io {
     fn send<'a>(

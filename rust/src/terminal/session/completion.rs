@@ -257,8 +257,7 @@ impl SessionEngine {
         &self,
         binding: SessionBinding,
         now: Timestamp,
-    ) -> Result<Option<(TranscriptSessionIdentity, Vec<TranscriptSessionIdentity>)>, SessionError>
-    {
+    ) -> Result<Option<CodexThreadView>, SessionError> {
         let mut state = lock(&self.state);
         let s = state.session(binding)?;
         if s.snapshot.provider != "codex"
@@ -301,7 +300,12 @@ impl SessionEngine {
                 }
             })
             .collect();
-        Ok(Some((identity, peers)))
+        let released = state.released_codex_rollouts(now);
+        Ok(Some(CodexThreadView {
+            identity,
+            peers,
+            released,
+        }))
     }
     pub fn apply_codex_thread_follow(
         &self,

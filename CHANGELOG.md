@@ -169,6 +169,12 @@ Release artifacts are published at
 
 ### Fixed
 
+- With several Codex sessions in one folder, closing one of them could make an
+  answered question come back, cut off where the terminal wrapped it. The Hub
+  took the closed session's conversation for another session's new one,
+  because Windows can leave the modification time of a file Codex still holds
+  open unchanged. It now reads the time of the newest record, and leaves a
+  closed session's conversation alone until something writes to it again.
 - On Windows, a failed local Rust build now leaves the previous executables
   available, so a running Hub can still start child sessions.
 

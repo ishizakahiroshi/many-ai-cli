@@ -167,6 +167,11 @@ struct State {
     /// number given out again on a later day may. An empty day is unknown and
     /// stops every launch under that number.
     dismissed: BTreeMap<LiveSessionId, BTreeSet<String>>,
+    /// Every rollout a Codex session of this Hub has read, with the time it was
+    /// first seen unread (`None`: a running session still reads it). Kept after
+    /// the session closes, so its conversation is not taken for another
+    /// session's next thread.
+    codex_rollouts: BTreeMap<String, Option<Timestamp>>,
     revoked_relay_children: BTreeSet<String>,
     uis: BTreeMap<UiConnectionId, UiState>,
     retired_uis: BTreeMap<(UiConnectionId, AuthEpoch), Arc<authorization::UiWorkState>>,
@@ -301,6 +306,41 @@ impl State {
         let day = crate::orchestration::handoff::record_day(started_at).unwrap_or_default();
         self.dismissed.entry(id).or_default().insert(day);
     }
+    /// Records what each Codex session reads now and returns the rollouts that
+    /// were read before and no longer are.
+    fn released_codex_rollouts(&mut self, now: Timestamp) -> Vec<ReleasedRollout> {
+        let mut read = BTreeSet::new();
+        for s in self.sessions.values() {
+            if s.snapshot.provider != "codex" {
+                continue;
+            }
+            let running = !terminal(&s.snapshot.state);
+            for path in [
+                s.transcript.native_log_path.clone(),
+                s.marker_source.resolved_path.to_string_lossy().into_owned(),
+            ] {
+                if path.is_empty() {
+                    continue;
+                }
+                self.codex_rollouts.entry(path.clone()).or_insert(None);
+                if running {
+                    read.insert(path);
+                }
+            }
+        }
+        let mut released = Vec::new();
+        for (path, released_at) in &mut self.codex_rollouts {
+            if read.contains(path) {
+                *released_at = None;
+            } else {
+                released.push(ReleasedRollout {
+                    path: path.clone(),
+                    released_at: *released_at.get_or_insert(now),
+                });
+            }
+        }
+        released
+    }
 }
 impl SessionEngine {
     /// Highest number already recorded on `day`, read only when numbering
@@ -369,6 +409,7 @@ impl SessionEngine {
                 auth_epoch: AuthEpoch(0),
                 sessions: BTreeMap::new(),
                 dismissed: BTreeMap::new(),
+                codex_rollouts: BTreeMap::new(),
                 revoked_relay_children: BTreeSet::new(),
                 uis: BTreeMap::new(),
                 retired_uis: BTreeMap::new(),

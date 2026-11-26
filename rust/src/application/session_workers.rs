@@ -544,14 +544,13 @@ impl SessionWorkers {
             if let Some(cursor) = cursors.get(&id)
                 && cursor.primed
                 && details.snapshot.provider == "codex"
-                && let Some((identity, peers)) =
+                && let Some(view) =
                     core.codex_thread_follow_view(details.binding, Timestamp::now())?
             {
                 let (next, ambiguous) = transcript_path::thread_switch(
                     &self.paths,
-                    &identity,
+                    &view,
                     &cursor.path,
-                    &peers,
                     Timestamp::now(),
                 );
                 core.apply_codex_thread_follow(details.binding, &cursor.path, next, ambiguous)?;

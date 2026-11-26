@@ -61,6 +61,17 @@ fn trial_transcript_read_rejects_external_file_and_symlink_alias() {
     }
 }
 
+fn view(
+    identity: &TranscriptSessionIdentity,
+    peers: &[TranscriptSessionIdentity],
+    released: &[ReleasedRollout],
+) -> CodexThreadView {
+    CodexThreadView {
+        identity: identity.clone(),
+        peers: peers.to_vec(),
+        released: released.to_vec(),
+    }
+}
 #[test]
 fn trial_discovery_thread_follow_and_parser_refuse_outside_directory_alias() {
     use crate::application::session_observations::subagents::open_artifact;
@@ -125,9 +136,8 @@ fn trial_discovery_thread_follow_and_parser_refuse_outside_directory_alias() {
     assert_eq!(
         transcript_path::thread_switch(
             &paths,
-            &codex,
+            &view(&codex, &[], &[]),
             &linked,
-            &[],
             parse_rfc3339("2026-10-05T01:00:00Z").unwrap()
         ),
         (None, false)
@@ -182,7 +192,7 @@ fn codex_thread_follow_rejects_subagent_and_parallel_peer_then_selects_latest_us
     write("subagent.jsonl", "2026-10-05T01:00:00Z", "parent");
     let now = parse_rfc3339("2026-10-05T03:00:00Z").unwrap();
     assert_eq!(
-        transcript_path::thread_switch(&paths, &identity, &current, &[], now),
+        transcript_path::thread_switch(&paths, &view(&identity, &[], &[]), &current, now),
         (None, false)
     );
     let next = write("next.jsonl", "2026-10-05T02:00:00Z", "");
@@ -194,11 +204,11 @@ fn codex_thread_follow_rejects_subagent_and_parallel_peer_then_selects_latest_us
         ..Default::default()
     };
     assert_eq!(
-        transcript_path::thread_switch(&paths, &identity, &current, &[peer], now),
+        transcript_path::thread_switch(&paths, &view(&identity, &[peer], &[]), &current, now),
         (None, true)
     );
     assert_eq!(
-        transcript_path::thread_switch(&paths, &identity, &current, &[], now),
+        transcript_path::thread_switch(&paths, &view(&identity, &[], &[]), &current, now),
         (Some(next), false)
     );
     fs::File::options()
@@ -208,8 +218,126 @@ fn codex_thread_follow_rejects_subagent_and_parallel_peer_then_selects_latest_us
         .set_modified(now.to_system_time_exact().unwrap())
         .unwrap();
     assert_eq!(
-        transcript_path::thread_switch(&paths, &identity, &current, &[], now),
+        transcript_path::thread_switch(&paths, &view(&identity, &[], &[]), &current, now),
         (None, false)
+    );
+}
+/// Windows keeps the modification time of a rollout Codex still holds open at
+/// about its start. The conversation is still the one being written, so a
+/// rollout that began later in the same directory is not its next thread.
+#[test]
+fn codex_thread_follow_reads_the_last_record_when_the_modification_time_stands_still() {
+    use chrono::{Datelike, Local};
+    let root = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(
+        root.path(),
+        49673,
+        &root.path().join("../installed-transcript-fixture"),
+    )
+    .unwrap();
+    let start = parse_rfc3339("2026-10-05T00:00:00Z").unwrap();
+    let day = crate::proto::time::utc(start)
+        .unwrap()
+        .with_timezone(&Local);
+    let dir = root
+        .path()
+        .join("sessions")
+        .join(format!("{:04}", day.year()))
+        .join(format!("{:02}", day.month()))
+        .join(format!("{:02}", day.day()));
+    fs::create_dir_all(&dir).unwrap();
+    // Every file keeps the modification time of its own first record.
+    let write = |name: &str, stamp: &str, later: &[String]| {
+        let path = dir.join(name);
+        let meta = serde_json::json!({"timestamp":stamp,"type":"session_meta","payload":{"cwd":"synthetic-cwd","timestamp":stamp,"thread_source":"user"}});
+        let mut content = meta.to_string() + "\n";
+        for line in later {
+            content += line;
+        }
+        fs::write(&path, content).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(
+                parse_rfc3339(stamp)
+                    .unwrap()
+                    .to_system_time_exact()
+                    .unwrap(),
+            )
+            .unwrap();
+        path
+    };
+    let record = |stamp: &str, text: &str| {
+        serde_json::json!({"timestamp":stamp,"type":"event_msg","payload":{"message":text}})
+            .to_string()
+            + "\n"
+    };
+    // The newest record sits behind one longer than the first tail window, and
+    // the line being written at this moment is still unfinished.
+    let current = write(
+        "current.jsonl",
+        "2026-10-05T00:00:00Z",
+        &[
+            record("2026-10-05T02:30:00Z", &"x".repeat(100 * 1024)),
+            "{\"timestamp\":\"2026-10-05T02:31:".to_owned(),
+        ],
+    );
+    write("other.jsonl", "2026-10-05T02:00:00Z", &[]);
+    let identity = TranscriptSessionIdentity {
+        provider: "codex".into(),
+        cwd: "synthetic-cwd".into(),
+        codex_home: root.path().to_string_lossy().into_owned(),
+        started_at: "2026-10-05T00:00:00Z".into(),
+        native_log_path: current.to_string_lossy().into_owned(),
+        ..Default::default()
+    };
+    let peer = TranscriptSessionIdentity {
+        started_at: "2026-10-04T00:00:00Z".into(),
+        native_log_path: String::new(),
+        ..identity.clone()
+    };
+    let now = parse_rfc3339("2026-10-05T03:00:00Z").unwrap();
+    assert_eq!(
+        transcript_path::thread_switch(
+            &paths,
+            &view(&identity, std::slice::from_ref(&peer), &[]),
+            &current,
+            now
+        ),
+        (None, false)
+    );
+    assert_eq!(
+        transcript_path::thread_switch(&paths, &view(&identity, &[], &[]), &current, now),
+        (None, false)
+    );
+    // An idle conversation: another session ran its own rollout meanwhile and
+    // closed. That rollout is left behind, not this session's next thread.
+    let later = write("later.jsonl", "2026-10-05T02:45:00Z", &[]);
+    let released = [ReleasedRollout {
+        path: later.to_string_lossy().into_owned(),
+        released_at: parse_rfc3339("2026-10-05T02:50:00Z").unwrap(),
+    }];
+    for peers in [vec![peer.clone()], vec![]] {
+        assert_eq!(
+            transcript_path::thread_switch(
+                &paths,
+                &view(&identity, &peers, &released),
+                &current,
+                now
+            ),
+            (None, false)
+        );
+    }
+    // Written to again after it was left: someone resumed it.
+    fs::write(
+        &later,
+        fs::read_to_string(&later).unwrap() + &record("2026-10-05T02:55:00Z", "resumed"),
+    )
+    .unwrap();
+    assert_eq!(
+        transcript_path::thread_switch(&paths, &view(&identity, &[], &released), &current, now),
+        (Some(later), false)
     );
 }
 #[test]
