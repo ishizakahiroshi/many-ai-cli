@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "20f2cd1b3c2357aaccec4653fa55e30a44f34bdf",
-    "dirty": true,
+    "commit": "71e5af5b92b4312c2c900f9a2aae7172bd7d7f96",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2161,
-    "analyzed": 1699,
+    "discovered": 2162,
+    "analyzed": 1700,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -35524,6 +35524,35 @@
         "summary": {
           "state": "value",
           "value": "Codex Desktop unpacks its bundled plugin marketplace (`openai-bundled`,"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/profile/subscriptions/codex_browser_runtime.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Refresh the package paths in an existing, bundled Windows Browser Use server."
         },
         "authentication": {
           "state": "not_configured"

@@ -320,6 +320,8 @@ pub(super) fn run(
         }
     }
     if provider == "codex" {
+        #[cfg(windows)]
+        super::codex_browser_runtime::repair_profile(destination, &mut notice);
         // Codex Desktop's browser plugins live only in the default home.
         let bundled = default_dir(paths, home, hub_cwd, environment, provider)?
             .join(".tmp")

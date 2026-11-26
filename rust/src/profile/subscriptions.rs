@@ -1,6 +1,8 @@
 //! Spawn-time profile selection and named-entry seeding. No auth/status/usage
 //! command exists in this module, and credentials are never part of its seed set.
 mod codex_browser;
+#[cfg(any(windows, test))]
+mod codex_browser_runtime;
 pub mod diagnostics;
 mod links;
 mod seed;
