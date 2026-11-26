@@ -57,7 +57,7 @@ fn package_id(name: &str) -> Option<([u16; 4], &str)> {
         .collect::<Result<_, _>>()
         .ok()?;
     let arch = fields.next()?;
-    if fields.next()? != "" || fields.next()? != PUBLISHER_ID || fields.next().is_some() {
+    if !fields.next()?.is_empty() || fields.next()? != PUBLISHER_ID || fields.next().is_some() {
         return None;
     }
     Some((version.try_into().ok()?, arch))
