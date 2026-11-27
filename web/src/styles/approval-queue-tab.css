@@ -351,6 +351,20 @@
   border-bottom: none;
 }
 
+.aqt-history-row.is-link {
+  cursor: pointer;
+}
+
+.aqt-history-row.is-link:hover,
+.aqt-history-row.is-link:focus-visible {
+  background: var(--row-hover);
+}
+
+.aqt-history-row.is-link:hover .aqt-history-q,
+.aqt-history-row.is-link:focus-visible .aqt-history-q {
+  text-decoration: underline;
+}
+
 .aqt-history-time {
   flex: none;
   color: var(--muted);

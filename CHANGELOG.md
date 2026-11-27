@@ -169,6 +169,10 @@ Release artifacts are published at
 
 ### Fixed
 
+- Rows under **Past approvals** in the approval tab can now be clicked to open
+  their session. A pending one shows its reply buttons; for earlier ones, the
+  chat scrolls to that point. A row whose session has closed is not clickable,
+  and says so when it was never replied to.
 - With several Codex sessions in one folder, closing one of them could make an
   answered question come back, cut off where the terminal wrapped it. The Hub
   took the closed session's conversation for another session's new one,

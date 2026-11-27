@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "4a978f5f0c04e1b22ef4843a98c530dbb5b705f5",
-    "dirty": true,
+    "commit": "e3f519c7b7464a35697a8dd79582e411f4adc845",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2162,
-    "analyzed": 1700,
+    "discovered": 2164,
+    "analyzed": 1702,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 445,
@@ -44731,6 +44731,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/approval-history-target.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "承認タブの「これまでの承認」の行を押したときの行き先を決める（DOM に触らないので単体で試せる）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/approval-owner-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -52355,6 +52385,36 @@
     },
     {
       "path": "web/tests/ai-launch-shell-settings.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/approval-history-target.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

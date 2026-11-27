@@ -7,9 +7,11 @@ import { activeSessionId, orderSessions, sessions } from './state.js';
 import { activateSession } from './session-list.js';
 import { extractHubMarkerApproval, isBatchOptions } from './approval-parser.js';
 import { isAskUserQuestionPending, pendingApprovalOptions, sendChoice } from './approval.js';
-import { hubBlockLines, isApprovalPending } from './approval-store.js';
+import { approvalRecordFor, hubBlockLines, isApprovalPending, unfoldApproval } from './approval-store.js';
 import { apiFetch, showToast } from './util.js';
 import { safeClassToken } from './provider-icon.js';
+import { approvalHistoryTarget } from './approval-history-target.js';
+import { revealChatQuestion } from './chat-history.js';
 
 // 承認タブのバッジカウント更新
 function getApprovalTabBadgeEl() {
@@ -175,7 +177,8 @@ let _expandedCards: Set<number> = new Set();
 
 // 描画に影響する状態だけを集めた署名を作る
 function approvalPaneSig(ids: number[]): string {
-  return `${_historyVersion}\u0000` + JSON.stringify(ids.map((id) => {
+  // 開いているセッションの一覧も入れる。履歴の行を押せるかどうかはそれで変わる。
+  return `${_historyVersion}\u0000${Array.from(sessions.keys()).join(',')}\u0000` + JSON.stringify(ids.map((id) => {
     const s = sessions.get(id);
     const options = pendingApprovalOptions(id);
     return {
@@ -279,6 +282,37 @@ function approvalRowSessionLabel(row: any): string {
   return dir;
 }
 
+// セッションを開いて、指定のタブを表示する。
+function openSessionTab(id: number, tab: 'terminal' | 'chat') {
+  activateSession(id);
+  (document.querySelector(`#unified-tab-bar .view-tab[data-tab="${tab}"]`) as HTMLButtonElement | null)?.click();
+}
+
+function historyRowTarget(row: any) {
+  const id = Number(row?.session_id) || 0;
+  return approvalHistoryTarget(row, sessions.get(id), approvalRecordFor(id));
+}
+
+// 履歴の行を押したとき。行き先は押した時点の状態で決め直す（描いた後に回答・終了することがある）。
+async function openApprovalHistoryRow(row: any): Promise<void> {
+  const id = Number(row?.session_id) || 0;
+  const target = historyRowTarget(row);
+  if (target === 'gone') {
+    showToast(t('approval_history_session_ended'));
+    _lastPaneSig = null;
+    renderApprovalPane();
+    return;
+  }
+  if (target === 'current') {
+    unfoldApproval(id); // 畳んだままだと、移動しても質問が見えない
+    openSessionTab(id, 'terminal');
+    return;
+  }
+  openSessionTab(id, 'chat');
+  const found = await revealChatQuestion(id, approvalRowSummary(row), String(row?.detected_at || ''));
+  if (!found) showToast(t('approval_history_question_not_found'));
+}
+
 function appendApprovalHistorySection(pane: HTMLElement): void {
   const wrap = document.createElement('section');
   wrap.className = 'aqt-history';
@@ -326,10 +360,24 @@ function appendApprovalHistorySection(pane: HTMLElement): void {
 
     const answer = document.createElement('span');
     answer.className = 'aqt-history-answer';
+    const target = historyRowTarget(row);
     answer.textContent = pending
-      ? t('approval_history_pending')
+      ? t(target === 'gone' ? 'approval_history_pending_ended' : 'approval_history_pending')
       : String(row?.selected_text || '').trim();
     li.appendChild(answer);
+
+    if (target !== 'gone') {
+      li.classList.add('is-link');
+      li.setAttribute('role', 'button');
+      li.tabIndex = 0;
+      li.title = t('approval_history_open');
+      li.addEventListener('click', () => { void openApprovalHistoryRow(row); });
+      li.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        void openApprovalHistoryRow(row);
+      });
+    }
 
     list.appendChild(li);
   }

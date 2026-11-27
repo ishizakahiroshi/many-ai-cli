@@ -13,6 +13,7 @@ import { chatPane, openLightbox } from './attachments.js';
 import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, transcriptMessagePresentation, transcriptReadPosition, transcriptRestoreTop, updateRenderedChatMessage, type TranscriptReadPosition } from './transcript-message.js';
 import { hasProviderCapability } from './provider-store.js';
 import { providerBadgeLetter, providerDeclaration, providerShortLabel } from './provider-declarations.js';
+import { findQuestionMessageIndex } from './approval-history-target.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -1061,6 +1062,29 @@ export function mountChatPaneForSession(sid) {
   restoreChatReadPosition(timeline);
   const position = chatReadPositions.get(String(sid));
   if (!position || position.following) scrollChatPaneToBottomSoon({ passes: 2 });
+}
+
+// 承認タブの履歴の行から、その質問が出た場所まで移動する。承認マーカーの中身は本文に出さない
+// （chat-normalize.ts）ので、元の本文で発言を探し、その発言が画面に出ていなければ直前の発言で止める。
+// 保存済みの会話は後から読み込まれるので、見つかるまで少し待つ。見つからなければ false。
+export async function revealChatQuestion(sid, question, detectedAt): Promise<boolean> {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 50 : 200));
+    if (sid !== activeSessionId) return true; // 利用者が別のセッションへ移った
+    const timeline = getChatTimelineEl();
+    if (!timeline || timeline.dataset.sid !== String(sid)) continue;
+    const msgs = getMessages(sid);
+    for (let i = findQuestionMessageIndex(msgs, question, detectedAt); i >= 0; i--) {
+      const el = timeline.querySelector<HTMLElement>(`.msg[data-msg-id="${msgs[i].id}"]`);
+      if (!el || el.style.display === 'none') continue;
+      chatScrollGeneration++; // 末尾へ寄せる予約を取り消す
+      timeline.querySelectorAll('.msg.msg-focus').forEach(x => x.classList.remove('msg-focus'));
+      el.classList.add('msg-focus');
+      el.scrollIntoView({ block: 'center' });
+      return true;
+    }
+  }
+  return false;
 }
 
 // display-area が chat 表示中かどうか（appendMessage の mount 欠落保険用）
