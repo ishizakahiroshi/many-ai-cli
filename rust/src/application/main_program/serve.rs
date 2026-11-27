@@ -285,8 +285,16 @@ impl HubComposition {
                 hub_cwd: context.cwd.clone(),
                 seeded: {
                     let logger = logger.clone();
-                    Arc::new(move |_| {
-                        logger.write("INFO", "subscription profile seed completed", "")
+                    Arc::new(move |notice| {
+                        if notice.failed.is_empty() {
+                            logger.write("INFO", "subscription profile seed completed", "");
+                        } else {
+                            logger.write(
+                                "WARN",
+                                "subscription profile seed incomplete",
+                                &notice.failed.join(", "),
+                            );
+                        }
                     })
                 },
                 trusted: {
