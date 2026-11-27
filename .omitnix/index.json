@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "71e5af5b92b4312c2c900f9a2aae7172bd7d7f96",
-    "dirty": false,
+    "commit": "4a978f5f0c04e1b22ef4843a98c530dbb5b705f5",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -35552,7 +35552,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Refresh the package paths in an existing, bundled Windows Browser Use server."
+          "value": "Refresh the package and plugin paths in an existing, bundled Windows Browser"
         },
         "authentication": {
           "state": "not_configured"
