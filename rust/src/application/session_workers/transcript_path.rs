@@ -7,12 +7,13 @@ use crate::{
     config::RuntimePaths,
     proto::{
         core::*,
-        time::{parse_rfc3339, utc},
+        time::{Timestamp, parse_rfc3339, utc},
     },
 };
 use chrono::{Datelike, Local};
 use std::{
-    io::{BufRead, BufReader, Read},
+    fs::File,
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -50,6 +51,36 @@ fn metadata(paths: &RuntimePaths, path: &Path, lines: usize) -> Option<serde_jso
     }
     None
 }
+/// Tail sizes tried in turn; one record can hold a whole tool output.
+const TAIL_WINDOWS: [u64; 3] = [64 * 1024, 1024 * 1024, 8 * 1024 * 1024];
+/// Codex may still write its closing records after the Hub has let a session go.
+const RELEASE_SLACK: Duration = Duration::from_secs(60);
+/// The timestamp of the newest complete record that carries one.
+fn last_record_at(file: &mut File) -> Option<Timestamp> {
+    let len = file.seek(SeekFrom::End(0)).ok()?;
+    for window in TAIL_WINDOWS {
+        let from = len.saturating_sub(window);
+        file.seek(SeekFrom::Start(from)).ok()?;
+        let mut tail = Vec::new();
+        file.by_ref().take(window).read_to_end(&mut tail).ok()?;
+        let found = tail.split(|byte| *byte == b'\n').rev().find_map(|line| {
+            let value = serde_json::from_slice::<serde_json::Value>(line).ok()?;
+            parse_rfc3339(value["timestamp"].as_str()?).ok()
+        });
+        if found.is_some() || from == 0 {
+            return found;
+        }
+    }
+    None
+}
+/// When a rollout was last written. Windows can leave the modification time of
+/// a file Codex still holds open near its start, so the newest record's own
+/// time is read too and the later of the two wins.
+fn last_written(paths: &RuntimePaths, path: &Path) -> Option<Timestamp> {
+    let mut file = open_artifact(paths, path).ok()?;
+    let modified = Timestamp::from_system_time(file.metadata().ok()?.modified().ok()?).ok()?;
+    Some(last_record_at(&mut file).map_or(modified, |at| at.max(modified)))
+}
 fn same_path(left: &str, right: &str) -> bool {
     let clean = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_owned();
     if cfg!(windows) {
@@ -66,20 +97,18 @@ pub(super) fn resolve(
 }
 pub(super) fn thread_switch(
     paths: &RuntimePaths,
-    identity: &TranscriptSessionIdentity,
+    view: &CodexThreadView,
     current: &Path,
-    peers: &[TranscriptSessionIdentity],
-    now: crate::proto::time::Timestamp,
+    now: Timestamp,
 ) -> (Option<PathBuf>, bool) {
+    let identity = &view.identity;
     let pick = || -> Option<(Option<PathBuf>, bool)> {
         let root = home(&identity.codex_home, &identity.home_dir, ".codex")?;
         let meta = metadata(paths, current, 1)?;
         let start = parse_rfc3339(meta["timestamp"].as_str()?).ok()?;
-        let modified = crate::proto::time::Timestamp::from_system_time(
-            artifact_metadata(paths, current).ok()?.modified().ok()?,
-        )
-        .ok()?;
-        let peers: Vec<_> = peers
+        let written = last_written(paths, current)?;
+        let peers: Vec<_> = view
+            .peers
             .iter()
             .filter(|peer| {
                 same_path(&peer.cwd, &identity.cwd)
@@ -91,7 +120,7 @@ pub(super) fn thread_switch(
         let start_date = utc(start).ok()?.with_timezone(&Local).date_naive();
         let end_date = utc(now).ok()?.with_timezone(&Local).date_naive();
         let mut day = start_date.max(end_date - chrono::Duration::days(2));
-        let mut best: Option<(crate::proto::time::Timestamp, PathBuf)> = None;
+        let mut best: Option<(Timestamp, PathBuf)> = None;
         while day <= end_date {
             let dir = root
                 .join("sessions")
@@ -127,13 +156,13 @@ pub(super) fn thread_switch(
                     else {
                         continue;
                     };
-                    if stamp <= start || modified > stamp + Duration::from_secs(5) {
+                    if stamp <= start || written > stamp + Duration::from_secs(5) {
                         continue;
                     }
                     let Some(file_modified) = artifact_metadata(paths, &path)
                         .ok()
                         .and_then(|meta| meta.modified().ok())
-                        .and_then(|at| crate::proto::time::Timestamp::from_system_time(at).ok())
+                        .and_then(|at| Timestamp::from_system_time(at).ok())
                     else {
                         continue;
                     };
@@ -155,6 +184,16 @@ pub(super) fn thread_switch(
                         }
                     });
                     if claimed {
+                        continue;
+                    }
+                    // Another session's conversation, closed since. It counts
+                    // again only if something writes to it after that.
+                    let left_behind = view.released.iter().any(|released| {
+                        same_path(&released.path, &path.to_string_lossy())
+                            && last_written(paths, &path)
+                                .is_none_or(|at| at <= released.released_at + RELEASE_SLACK)
+                    });
+                    if left_behind {
                         continue;
                     }
                     if best
