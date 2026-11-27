@@ -270,6 +270,7 @@ impl SessionEngine {
         }
         s.completion.thread_checked = Some(now);
         let identity = s.transcript.clone();
+        let codex = s.snapshot.provider.clone();
         let peers = state
             .sessions
             .values()
@@ -300,7 +301,7 @@ impl SessionEngine {
                 }
             })
             .collect();
-        let released = state.released_codex_rollouts(now);
+        let released = state.released_codex_rollouts(&codex, now);
         Ok(Some(CodexThreadView {
             identity,
             peers,

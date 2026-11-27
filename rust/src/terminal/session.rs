@@ -307,11 +307,12 @@ impl State {
         self.dismissed.entry(id).or_default().insert(day);
     }
     /// Records what each Codex session reads now and returns the rollouts that
-    /// were read before and no longer are.
-    fn released_codex_rollouts(&mut self, now: Timestamp) -> Vec<ReleasedRollout> {
+    /// were read before and no longer are. `codex` is the provider of the
+    /// asking session, which the caller has already checked is Codex.
+    fn released_codex_rollouts(&mut self, codex: &str, now: Timestamp) -> Vec<ReleasedRollout> {
         let mut read = BTreeSet::new();
         for s in self.sessions.values() {
-            if s.snapshot.provider != "codex" {
+            if s.snapshot.provider != codex {
                 continue;
             }
             let running = !terminal(&s.snapshot.state);
