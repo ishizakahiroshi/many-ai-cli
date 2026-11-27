@@ -14,7 +14,8 @@
 //   rust/src と web/src の .rs / .ts / .html を読み、7 本の id を引用符で囲んだ文字列
 //   （"claude" 'codex' `grok` など）の数をファイルごとに数える。次はそもそも数えない。
 //     - テスト・fixture・試験データ（tests.rs / *_tests.rs / tests/ / *-fixtures.ts /
-//       *.test.ts）、Rust の #[cfg(test)] 以降、コメント行
+//       *.test.ts）、Rust の行頭の #[cfg(test)] が付いた項目（その下の本体は数える）、
+//       コメント行
 //     - .json（同梱の宣言・試験データ。宣言の置き場そのもの）・.go・.py・.css
 //   数えた結果を scripts/provider-hardcode-baseline.json（許可の台帳）と突き合わせる。
 //     - 台帳に無いファイルに 1 件でも出た → ブロック
@@ -56,12 +57,82 @@ const SKIP_FILE =
 
 const quoted = new RegExp('["\'`](' + PROVIDER_IDS.join('|') + ')["\'`]', 'g');
 
-export function countHits(relPath, text) {
-  let body = text;
-  if (relPath.endsWith('.rs')) {
-    const idx = body.search(/^#\[cfg\(test\)\]/m);
-    if (idx >= 0) body = body.slice(0, idx);
+// Rust の文字列・文字リテラル・コメントを 1 つ読み飛ばした先の位置を返す（どれでもなければ i）。
+// 括弧の対応を数えるとき、中の括弧を数えないため。
+function skipRustToken(s, i) {
+  if (s.startsWith('//', i)) {
+    const end = s.indexOf('\n', i);
+    return end < 0 ? s.length : end;
   }
+  if (s.startsWith('/*', i)) {
+    let depth = 0;
+    for (let j = i; j < s.length; j++) {
+      if (s.startsWith('/*', j)) { depth++; j++; }
+      else if (s.startsWith('*/', j)) { depth--; j++; if (depth === 0) return j + 1; }
+    }
+    return s.length;
+  }
+  const raw = /^b?r(#*)"/.exec(s.slice(i, i + 40));
+  if (raw && !/\w/.test(s[i - 1] ?? '')) {
+    const end = s.indexOf('"' + raw[1], i + raw[0].length);
+    return end < 0 ? s.length : end + 1 + raw[1].length;
+  }
+  if (s[i] === '"') {
+    for (let j = i + 1; j < s.length; j++) {
+      if (s[j] === '\\') j++;
+      else if (s[j] === '"') return j + 1;
+    }
+    return s.length;
+  }
+  // 文字リテラル。ライフタイム（'a）は閉じ引用符が無いので当たらない。
+  const ch = /^'(?:\\(?:u\{[0-9a-fA-F_]+\}|x[0-9a-fA-F]{2}|.)|[^\\'\n])'/u.exec(s.slice(i, i + 16));
+  return ch ? i + ch[0].length : i;
+}
+
+// 属性の直後の位置 from から始まる 1 項目（mod / fn / use / フィールドなど）の終わりを返す。
+function endOfRustItem(s, from) {
+  let depth = 0;
+  let head = '';
+  for (let i = from; i < s.length; i++) {
+    const next = skipRustToken(s, i);
+    if (next > i) { i = next - 1; continue; }
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') {
+      depth--;
+      if (depth < 0) return i; // 親の閉じ括弧。この項目はその手前まで
+      // 属性（#[...]）の閉じは項目の終わりではない。本体の } で終わる。
+      if (depth === 0 && c === '}') return i + 1;
+    } else if (depth === 0) {
+      if (c === ';') return i + 1;
+      // カンマで終わるのはフィールドや腕だけ。宣言の型引数のカンマでは切らない。
+      if (c === ',' && !/\b(fn|mod|impl|struct|enum|trait|type|const|static|let|where)\b/.test(head)) {
+        return i + 1;
+      }
+      head += c;
+    }
+  }
+  return s.length;
+}
+
+// 行頭の #[cfg(test)] が付いた項目だけを取り除く（行番号は保つ）。以前はそこから下を
+// 全部捨てていたので、`#[cfg(test)] mod tests;` を先頭に置いたファイルは本体が検査されなかった。
+export function stripRustTestItems(text) {
+  const attr = /^#\[cfg\(test\)\]/gm;
+  let out = '';
+  let kept = 0;
+  let m;
+  while ((m = attr.exec(text))) {
+    const end = endOfRustItem(text, m.index + m[0].length);
+    out += text.slice(kept, m.index) + text.slice(m.index, end).replace(/[^\n]+/g, '');
+    kept = end;
+    attr.lastIndex = end;
+  }
+  return out + text.slice(kept);
+}
+
+export function countHits(relPath, text) {
+  const body = relPath.endsWith('.rs') ? stripRustTestItems(text) : text;
   const hits = [];
   const lines = body.split('\n');
   for (let i = 0; i < lines.length; i++) {

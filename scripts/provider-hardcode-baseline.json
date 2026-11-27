@@ -1,12 +1,24 @@
 {
   "files": {
+    "rust/src/application/agent_history.rs": {
+      "count": 2,
+      "reason": "vendor: Grok の会話記録の保存形式に結びつく処理。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
     "rust/src/application/agent_history/discovery.rs": {
+      "count": 14,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す。うち大半は、以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
+    "rust/src/application/approval_rules.rs": {
       "count": 1,
-      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+      "reason": "vendor: Claude のトランスクリプトを読み直して承認の裏取りをする処理。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
     },
     "rust/src/application/board_sync/taker.rs": {
       "count": 1,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/cli_updates.rs": {
+      "count": 1,
+      "reason": "vendor: Codex の CLI 更新後の後始末。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
     },
     "rust/src/application/diagnostics.rs": {
       "count": 2,
@@ -24,6 +36,10 @@
       "count": 1,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
     },
+    "rust/src/application/instruction_rules.rs": {
+      "count": 10,
+      "reason": "vendor / identity: Claude・Codex の設定フォルダと指示ファイルの扱い、同梱 provider の並び順。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
     "rust/src/application/iris_execution_launch.rs": {
       "count": 2,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
@@ -32,9 +48,21 @@
       "count": 9,
       "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
     },
+    "rust/src/application/main_program/model_catalog.rs": {
+      "count": 12,
+      "reason": "pending: 各社のモデル一覧の取り方。宣言（models）へ移せるかは未確認。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
     "rust/src/application/main_program/model_catalog/parsers.rs": {
       "count": 3,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/orchestration_program.rs": {
+      "count": 3,
+      "reason": "vendor: 子の既定の provider と、信頼の付与に対応する 2 社の限定。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
+    "rust/src/application/ordinary_spawn.rs": {
+      "count": 4,
+      "reason": "vendor: 各社の権限モードのうち、起動前の確認が要る組み合わせ。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
     },
     "rust/src/application/output_model.rs": {
       "count": 8,
@@ -43,6 +71,14 @@
     "rust/src/application/push/workflow.rs": {
       "count": 1,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/session_usage.rs": {
+      "count": 2,
+      "reason": "vendor: Codex・Claude の使用量の読み取り。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
+    "rust/src/application/session_workers.rs": {
+      "count": 2,
+      "reason": "vendor: Codex の会話の追従。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
     },
     "rust/src/application/session_workers/observations.rs": {
       "count": 3,
@@ -59,6 +95,10 @@
     "rust/src/application/session_workers/subagent_activity.rs": {
       "count": 1,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/slash_commands.rs": {
+      "count": 10,
+      "reason": "identity / migration: 同梱 7 本の一覧と、旧 Go 版と一致を保つ設定の型。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
     },
     "rust/src/application/slash_commands/skills.rs": {
       "count": 3,
@@ -100,6 +140,10 @@
       "count": 3,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
     },
+    "rust/src/application/usage_relay.rs": {
+      "count": 3,
+      "reason": "vendor: Claude・Codex の使用量の中継。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
     "rust/src/application/usage_relay/parser.rs": {
       "count": 2,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
@@ -128,6 +172,10 @@
       "count": 3,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
     },
+    "rust/src/profile/subscriptions/codex_browser.rs": {
+      "count": 1,
+      "reason": "vendor: Codex のブラウザ連携。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
+    },
     "rust/src/profile/subscriptions/seed.rs": {
       "count": 8,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
@@ -151,6 +199,10 @@
     "rust/src/terminal/session/board_input.rs": {
       "count": 2,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/terminal/session/completion.rs": {
+      "count": 8,
+      "reason": "vendor: Codex のターンの開始・完了と会話の追従。以前は #[cfg(test)] より下で検査の対象外だった行を 2026-11-28 に台帳へ入れた"
     },
     "rust/src/terminal/session/observations.rs": {
       "count": 1,

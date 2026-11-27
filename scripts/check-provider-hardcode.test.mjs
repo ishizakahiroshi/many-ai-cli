@@ -19,6 +19,37 @@ test('quoted provider ids are counted; comments, tests and bare words are not', 
   assert.equal(countHits('x.ts', 'const a = `opencode`; const b = "command-code";').length, 2);
 });
 
+test('only the item under #[cfg(test)] is skipped; code below it is still counted', () => {
+  const src = [
+    '#[cfg(test)]',
+    '#[path = "x_tests.rs"]',
+    'mod tests;',
+    'let a = "codex";',
+    '#[cfg(test)]',
+    'use super::{a, b};',
+    '#[cfg(test)]',
+    'pub(crate) fn probe<A, B>(a: [u8; 3]) -> B',
+    'where',
+    '    A: Into<B>,',
+    '{',
+    '    let s = r#"',
+    '}',
+    '"#;',
+    '    let c = \'}\'; // }',
+    '    "grok"',
+    '}',
+    '#[cfg(test)]',
+    'mod inline {',
+    '    const J: &str = "{ \\" }";',
+    '    const P: &str = "opencode";',
+    '}',
+    'let b = "claude";',
+  ].join('\r\n');
+  assert.deepEqual(countHits('x.rs', src).map((h) => h.line), [4, 23]);
+  const field = 'struct S {\n#[cfg(test)]\nprobe: fn(u8, u8),\nname: &str,\n}\nlet d = "grok";';
+  assert.deepEqual(countHits('x.rs', field).map((h) => h.line), [6]);
+});
+
 test('a file outside the baseline, or above its count, fails; below is only shrinkable', () => {
   const hit = [{ line: 1, text: 'x' }];
   const scanned = new Map([
