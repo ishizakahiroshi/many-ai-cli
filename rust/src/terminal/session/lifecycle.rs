@@ -99,8 +99,12 @@ impl SessionEngine {
         // The number is the day's running count, and the handoff records are
         // named by that day and number (#44).
         let day = crate::orchestration::handoff::record_day(&started).unwrap_or_default();
-        let floor = self.numbering_floor(&day);
-        let (binding, size, lease, metadata) = {
+        let floor = self.numbering_floor(&day)?;
+        let proof_hash = request
+            .spawn_proof
+            .as_deref()
+            .map(crate::approval::identity::digest);
+        let (next_id, next_incarnation) = {
             let mut state = lock(&self.state);
             state.enter_numbering_day(&day, floor);
             // Allocation failure must neither consume a one-use proof nor leave
@@ -112,22 +116,26 @@ impl SessionEngine {
             let next_incarnation = state.next_incarnation.checked_add(1).ok_or_else(|| {
                 SessionError::InvalidRequest("session incarnation exhausted".into())
             })?;
-            let pending = if let Some(proof) = request.spawn_proof {
-                let hash = crate::approval::identity::digest(&proof);
-                let Some(lease) = state.spawn_proofs.get(&hash) else {
-                    return Err(SessionError::InvalidRequest(
-                        "invalid registration proof".into(),
-                    ));
-                };
-                if lease.lease.provider != m.provider {
-                    return Err(SessionError::InvalidRequest(
-                        "invalid registration proof".into(),
-                    ));
-                }
-                state
+            if let Some(hash) = &proof_hash
+                && state
                     .spawn_proofs
-                    .remove(&hash)
-                    .expect("validated one-use proof")
+                    .get(hash)
+                    .is_none_or(|pending| pending.lease.provider != m.provider)
+            {
+                return Err(SessionError::InvalidRequest(
+                    "invalid registration proof".into(),
+                ));
+            }
+            (next_id, next_incarnation)
+        };
+        self.save_number(&day, next_id)?;
+        let (binding, size, lease, metadata) = {
+            let mut state = lock(&self.state);
+            let pending = if let Some(hash) = proof_hash {
+                // Cancellation can revoke the proof while the counter is being saved.
+                state.spawn_proofs.remove(&hash).ok_or_else(|| {
+                    SessionError::InvalidRequest("invalid registration proof".into())
+                })?
             } else {
                 PendingSpawn {
                     lease: state
@@ -498,13 +506,13 @@ impl SessionEngine {
             Ok(t) => (t, m.started_at.clone()),
             Err(_) => (now, reattached_at.clone()),
         };
-        let floor = self.numbering_floor(&today);
+        let floor = self.numbering_floor(&today)?;
         // A launch an earlier version recorded under the bare number keeps
         // writing there, so upgrading the Hub does not cut its handoff (#44).
         let legacy = self.options.record_index.as_ref().is_some_and(|index| {
             index.continues_legacy_launch(m.session_id, &started_text, &m.provider, &m.cwd)
         });
-        let (binding, lease, record_key) = {
+        let (binding, lease, record_key, number_to_save) = {
             let mut state = lock(&self.state);
             if state.dismissed_for(requested, &started_day) {
                 return Err(SessionError::InvalidRequest("session dismissed".into()));
@@ -562,8 +570,15 @@ impl SessionEngine {
                 },
                 lease,
                 record_key,
+                (collision || (!legacy && started_day == today)).then_some(state.next_id),
             )
         };
+        if let Some(number) = number_to_save
+            && let Err(error) = self.save_number(&today, number)
+        {
+            lock(&self.state).admission.end_provider_spawn(&lease);
+            return Err(error);
+        }
         let size = TerminalSize {
             cols: m.cols,
             rows: m.rows,
