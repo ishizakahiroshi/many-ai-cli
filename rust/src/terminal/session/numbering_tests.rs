@@ -14,8 +14,11 @@ struct Index {
     legacy: bool,
 }
 impl SessionRecordIndex for Index {
-    fn highest_number_on(&self, day: &str) -> i64 {
-        self.highest.get(day).copied().unwrap_or(0)
+    fn highest_number_on(&self, day: &str) -> std::io::Result<i64> {
+        Ok(self.highest.get(day).copied().unwrap_or(0))
+    }
+    fn save_number(&self, _: &str, _: i64) -> std::io::Result<()> {
+        Ok(())
     }
     fn continues_legacy_launch(&self, _: i64, _: &str, _: &str, _: &str) -> bool {
         self.legacy
@@ -26,9 +29,16 @@ fn engine(index: Option<Index>) -> (tempfile::TempDir, SessionEngine) {
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
     let paths = RuntimePaths::trial(&runtime, 49689, &root.path().join("installed")).unwrap();
-    let core = SessionEngine::new(
+    let core = engine_at(
+        paths,
+        index.map(|index| Arc::new(index) as Arc<dyn SessionRecordIndex>),
+    );
+    (root, core)
+}
+fn engine_at(paths: RuntimePaths, index: Option<Arc<dyn SessionRecordIndex>>) -> SessionEngine {
+    SessionEngine::new(
         EngineOptions {
-            record_index: index.map(|index| Arc::new(index) as Arc<dyn SessionRecordIndex>),
+            record_index: index,
             ..Default::default()
         },
         Arc::new(SessionJournal::new(paths, None, JournalOptions::default())),
@@ -36,8 +46,7 @@ fn engine(index: Option<Index>) -> (tempfile::TempDir, SessionEngine) {
         Arc::new(Io),
         Arc::new(Io),
         CoreEventBus::new(64).unwrap(),
-    );
-    (root, core)
+    )
 }
 fn later(days: u64) -> Timestamp {
     now() + Duration::from_secs(days * 24 * 60 * 60)
@@ -56,6 +65,13 @@ fn message(pid: i64) -> proto::Message {
     }
 }
 async fn register_at(core: &SessionEngine, pid: i64, at: Timestamp) -> SessionBinding {
+    try_register_at(core, pid, at).await.unwrap().binding
+}
+async fn try_register_at(
+    core: &SessionEngine,
+    pid: i64,
+    at: Timestamp,
+) -> Result<Registration, SessionError> {
     core.register(
         RegisterRequest {
             message: message(pid),
@@ -65,8 +81,6 @@ async fn register_at(core: &SessionEngine, pid: i64, at: Timestamp) -> SessionBi
         at,
     )
     .await
-    .unwrap()
-    .binding
 }
 /// The returned reattachment holds the persistence order until it is
 /// dropped; take its binding before the next registration.
@@ -93,6 +107,58 @@ async fn reattach_at(
 }
 fn key(core: &SessionEngine, id: LiveSessionId) -> String {
     core.snapshot(id).unwrap().record_key
+}
+
+#[tokio::test]
+async fn restarts_continue_numbering_even_without_handoff_records() {
+    let root = tempfile::tempdir().unwrap();
+    let runtime = root.path().join("trial");
+    std::fs::create_dir(&runtime).unwrap();
+    let paths = RuntimePaths::trial(&runtime, 49689, &root.path().join("installed")).unwrap();
+    let restart = || {
+        engine_at(
+            paths.clone(),
+            Some(Arc::new(crate::orchestration::handoff::HandoffStore::new(
+                paths.clone(),
+            ))),
+        )
+    };
+    let first = restart();
+    assert_eq!(register_at(&first, 1, now()).await.session.0, 1);
+    drop(first);
+    let second = restart();
+    // A failed reservation must not hand out the number or consume it in memory.
+    let marker = paths.root().join("session-number.json");
+    let backup = root.path().join("saved-number");
+    // Load today's floor before forcing an atomic replacement error.
+    assert_eq!(register_at(&second, 2, now()).await.session.0, 2);
+    std::fs::rename(&marker, &backup).unwrap();
+    std::fs::create_dir(&marker).unwrap();
+    assert!(matches!(
+        try_register_at(&second, 3, now()).await,
+        Err(SessionError::Storage(_))
+    ));
+    std::fs::remove_dir(&marker).unwrap();
+    std::fs::rename(&backup, &marker).unwrap();
+    // A wrapper returning under a lower number must not move the saved count back.
+    let started = proto::time::format_rfc3339(now()).unwrap();
+    reattach_at(&second, 1, 1, &started, now()).await.unwrap();
+    drop(second);
+    let third = restart();
+    assert_eq!(register_at(&third, 3, now()).await.session.0, 3);
+    assert_eq!(register_at(&third, 4, later(1)).await.session.0, 1);
+    assert!(!paths.resource(crate::config::Resource::Handoff).exists());
+    assert_eq!(
+        std::fs::read(&marker).unwrap(),
+        serde_json::to_vec(&(day_of(later(1)), 1)).unwrap()
+    );
+    drop(third);
+    std::fs::write(&marker, b"incomplete").unwrap();
+    assert!(matches!(
+        try_register_at(&restart(), 5, later(1)).await,
+        Err(SessionError::Storage(_))
+    ));
+    assert_eq!(std::fs::read(marker).unwrap(), b"incomplete");
 }
 
 #[tokio::test]

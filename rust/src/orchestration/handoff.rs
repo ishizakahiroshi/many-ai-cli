@@ -542,8 +542,31 @@ impl HandoffStore {
     }
 }
 impl crate::terminal::session::SessionRecordIndex for HandoffStore {
-    fn highest_number_on(&self, day: &str) -> i64 {
-        HandoffStore::highest_number_on(self, day)
+    fn highest_number_on(&self, day: &str) -> io::Result<i64> {
+        let recorded = HandoffStore::highest_number_on(self, day);
+        let data = match Dir::open(self.paths.root()).and_then(|dir| dir.read(NUMBER_FILE, 64)) {
+            Ok(data) => data,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(recorded),
+            Err(error) => return Err(error),
+        };
+        // The bounds also reject a truncated read of an oversized file.
+        let (saved_day, saved_number): (String, i64) = serde_json::from_slice(&data)?;
+        if data.len() == 64 || !is_record_day(&saved_day) || saved_number <= 0 {
+            return Err(io::Error::other("invalid daily session number"));
+        }
+        Ok(if saved_day == day {
+            recorded.max(saved_number)
+        } else {
+            recorded
+        })
+    }
+    fn save_number(&self, day: &str, number: i64) -> io::Result<()> {
+        // The runtime lease excludes other Hubs. Registration serializes this
+        // write with numbering and reattachment; recording can be disabled.
+        private_io::write_atomic(
+            &self.paths.root().join(NUMBER_FILE),
+            &serde_json::to_vec(&(day, number))?,
+        )
     }
     fn continues_legacy_launch(
         &self,
@@ -555,6 +578,7 @@ impl crate::terminal::session::SessionRecordIndex for HandoffStore {
         HandoffStore::continues_legacy_launch(self, number, started_at, provider, cwd)
     }
 }
+const NUMBER_FILE: &str = "session-number.json";
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct DirStatus {
     pub exists: bool,

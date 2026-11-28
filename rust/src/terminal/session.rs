@@ -60,7 +60,9 @@ pub type PendingShellLookup = Arc<
 /// them (#44). Called outside the state lock, under the registration lock.
 pub trait SessionRecordIndex: Send + Sync {
     /// Highest session number that already has records on `day` (`YYYYMMDD`).
-    fn highest_number_on(&self, day: &str) -> i64;
+    fn highest_number_on(&self, day: &str) -> std::io::Result<i64>;
+    /// Save only the numbering day and its high-water mark, before acknowledgement.
+    fn save_number(&self, day: &str, number: i64) -> std::io::Result<()>;
     /// Whether a wrapper coming back as `number` is a launch an earlier
     /// version recorded under the bare number, so it keeps writing there.
     fn continues_legacy_launch(
@@ -346,16 +348,32 @@ impl State {
 impl SessionEngine {
     /// Highest number already recorded on `day`, read only when numbering
     /// enters that day. Blocking I/O: call outside the state lock.
-    fn numbering_floor(&self, day: &str) -> Option<i64> {
+    fn numbering_floor(&self, day: &str) -> Result<Option<i64>, SessionError> {
         if lock(&self.state).numbering_day == day {
-            return None;
+            return Ok(None);
         }
-        Some(
-            self.options
-                .record_index
-                .as_ref()
-                .map_or(0, |index| index.highest_number_on(day)),
-        )
+        self.options
+            .record_index
+            .as_ref()
+            .map(|index| index.highest_number_on(day))
+            .transpose()
+            .map_err(|_| {
+                SessionError::Storage(StorageError {
+                    kind: StorageErrorKind::Query,
+                    detail: "could not read the daily session number".into(),
+                })
+            })
+    }
+    fn save_number(&self, day: &str, number: i64) -> Result<(), SessionError> {
+        if let Some(index) = &self.options.record_index {
+            index.save_number(day, number).map_err(|_| {
+                SessionError::Storage(StorageError {
+                    kind: StorageErrorKind::Write,
+                    detail: "could not save the daily session number".into(),
+                })
+            })?;
+        }
+        Ok(())
     }
 }
 fn timestamp(now: Timestamp) -> Result<String, SessionError> {

@@ -137,6 +137,7 @@ Release artifacts are published at
 
 ### Changed
 
+- Session numbers continue from the last number issued that day after a Hub restart, including when handoff recording is disabled. The Hub keeps only the date and number in `session-number.json` (#44).
 - A provider definition's `launch.permission_args` and
   `capabilities.slash_suggestion_popup` are read as the same declarations as
   `permissions.modes` and `input.slash_submit: paste` (a value written in the
